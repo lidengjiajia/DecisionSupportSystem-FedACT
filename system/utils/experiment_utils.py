@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import List, Dict, Callable, Any, Optional
+from tqdm import tqdm
 
 
 def get_gpu_info() -> Dict[str, Any]:
@@ -258,6 +259,10 @@ class ExperimentRunner:
                 )
                 future_to_exp[future] = exp
             
+            # 使用 tqdm 显示进度条
+            pbar = tqdm(total=total, desc="实验进度", unit="exp",
+                       bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
+            
             for future in as_completed(future_to_exp):
                 exp = future_to_exp[future]
                 completed_count += 1
@@ -274,14 +279,24 @@ class ExperimentRunner:
                 avg_time = elapsed / completed_count
                 remaining_time = avg_time * (total - completed_count)
                 
-                status = '成功' if result.get('success') else '失败'
+                status = '✓' if result.get('success') else '✗'
+                acc = result.get('accuracy', 0)
+                acc_str = f"{acc:.4f}" if isinstance(acc, float) and acc > 0 else "N/A"
+                
+                # 更新进度条描述
+                pbar.set_postfix_str(f"{exp['name'][:30]} {status} Acc:{acc_str}")
+                pbar.update(1)
+                
+                # 详细日志写入文件
                 progress_msg = (
                     f"[{completed_count}/{total}] ({100*completed_count/total:.1f}%) "
-                    f"{exp['name']} - {status} - "
-                    f"Acc: {result.get('accuracy', 'N/A')} - "
+                    f"{exp['name']} - {'成功' if result.get('success') else '失败'} - "
+                    f"Acc: {acc_str} - "
                     f"剩余时间: {remaining_time/60:.1f}分钟"
                 )
                 self.log(progress_msg)
+            
+            pbar.close()
         
         total_time = time.time() - start_time
         self.log(f"实验完成! 总耗时: {total_time/60:.1f}分钟")
