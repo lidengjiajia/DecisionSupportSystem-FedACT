@@ -302,6 +302,79 @@ class ExperimentRunner:
         self.log(f"实验完成! 总耗时: {total_time/60:.1f}分钟")
         
         return all_results
+    
+    def run_experiments_sequential(
+        self,
+        experiments: List[Dict],
+        run_func: Callable,
+        all_results: List[Dict] = None,
+    ) -> List[Dict]:
+        """
+        串行运行实验（更稳定，适合Windows）
+        
+        Args:
+            experiments: 待运行实验列表
+            run_func: 运行单个实验的函数
+            all_results: 已有结果（用于断点续跑）
+        
+        Returns:
+            list: 所有实验结果
+        """
+        if all_results is None:
+            all_results = []
+        
+        total = len(experiments)
+        start_time = time.time()
+        
+        self.log(f"开始串行运行 {total} 个实验")
+        
+        gpu_count = max(1, self.gpu_info["count"])
+        
+        # 使用 tqdm 显示进度条
+        pbar = tqdm(experiments, desc="实验进度", unit="exp",
+                   bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
+        
+        for i, exp in enumerate(pbar):
+            gpu_id = i % gpu_count
+            
+            try:
+                result = run_func(
+                    exp['cmd'],
+                    exp['name'],
+                    gpu_id,
+                    self.logs_dir,
+                )
+            except Exception as e:
+                result = {"name": exp['name'], "success": False, "error": str(e)}
+            
+            result.update(exp.get('info', {}))
+            all_results.append(result)
+            
+            elapsed = time.time() - start_time
+            completed_count = i + 1
+            avg_time = elapsed / completed_count
+            remaining_time = avg_time * (total - completed_count)
+            
+            status = '✓' if result.get('success') else '✗'
+            acc = result.get('accuracy', 0)
+            acc_str = f"{acc:.4f}" if isinstance(acc, float) and acc > 0 else "N/A"
+            
+            # 更新进度条描述
+            pbar.set_postfix_str(f"{status} Acc:{acc_str}")
+            
+            # 日志
+            progress_msg = (
+                f"[{completed_count}/{total}] ({100*completed_count/total:.1f}%) "
+                f"{exp['name']} - {'成功' if result.get('success') else '失败'} - "
+                f"Acc: {acc_str} - "
+                f"剩余时间: {remaining_time/60:.1f}分钟"
+            )
+            self.log(progress_msg)
+        
+        total_time = time.time() - start_time
+        self.log(f"实验完成! 总耗时: {total_time/60:.1f}分钟")
+        
+        return all_results
 
 
 def run_single_experiment(
