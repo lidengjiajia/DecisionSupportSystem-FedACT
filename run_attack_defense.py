@@ -403,8 +403,8 @@ def run_all_attack_defense_experiments():
         except:
             pass
     
-    # 7. 并发运行剩余实验
-    all_results = runner.run_experiments_concurrent(
+    # 7. 串行运行剩余实验（Windows上更稳定）
+    all_results = runner.run_experiments_sequential(
         remaining,
         run_single_experiment,
         existing_results,

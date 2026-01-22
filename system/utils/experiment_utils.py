@@ -391,13 +391,28 @@ def run_single_experiment(
     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     
     # main.py 在 system/flcore/main.py，工作目录应是 system
+    # cmd[1] 可能是 system/flcore/main.py，需要转换为 flcore/main.py
     main_py_path = Path(cmd[1]) if len(cmd) > 1 else Path.cwd()
-    system_dir = main_py_path.parent.parent  # system/flcore -> system
+    
+    # 获取 system 目录（绝对路径）
+    if main_py_path.is_absolute():
+        system_dir = main_py_path.parent.parent.resolve()
+        relative_main_py = "flcore/main.py"
+    else:
+        # 相对路径：system/flcore/main.py -> 工作目录设为当前目录的system，脚本路径改为flcore/main.py
+        system_dir = Path.cwd() / main_py_path.parent.parent
+        system_dir = system_dir.resolve()
+        relative_main_py = "flcore/main.py"
+    
     env["PYTHONPATH"] = str(system_dir)
+    
+    # 修正命令中的脚本路径为相对于工作目录的路径
+    fixed_cmd = cmd.copy()
+    fixed_cmd[1] = relative_main_py
     
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=7200,
+            fixed_cmd, capture_output=True, text=True, timeout=7200,
             cwd=str(system_dir), env=env
         )
         
