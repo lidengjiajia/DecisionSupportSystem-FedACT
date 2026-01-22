@@ -1,0 +1,9 @@
+/results
+/system/models
+*__pycache__*
+
+# Large dataset files (>100MB)
+dataset/EuropeCreditCardFraud/creditcard.csv
+dataset/EuropeCreditCardFraud/rawdata/
+dataset/*/rawdata/
+*.csv

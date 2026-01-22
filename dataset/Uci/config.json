@@ -1,0 +1,10 @@
+{
+  "num_clients": 10,
+  "num_classes": 2,
+  "non_iid": false,
+  "balance": false,
+  "partition": "feature_shift",
+  "feature_dim": 23,
+  "batch_size": 10,
+  "heterogeneity_type": "iid"
+}
