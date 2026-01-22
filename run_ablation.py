@@ -200,7 +200,7 @@ def build_command(dataset: str, config_key: str, attack: str, ratio: float, run:
     
     cmd = [
         sys.executable,
-        str(SYSTEM_DIR / "main.py"),
+        str(SYSTEM_DIR / "flcore" / "main.py"),
         "-data", dataset,
         "-algo", algo,
         "-nc", str(TRAIN_PARAMS["num_clients"]),

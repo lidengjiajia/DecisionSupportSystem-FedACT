@@ -133,7 +133,7 @@ def build_command(dataset: str, algo: str, heterogeneity: str, run: int) -> list
     
     cmd = [
         sys.executable,
-        str(SYSTEM_DIR / "main.py"),
+        str(SYSTEM_DIR / "flcore" / "main.py"),
         "-data", dataset,
         "-algo", algo_name,
         "-nc", str(TRAIN_PARAMS["num_clients"]),
