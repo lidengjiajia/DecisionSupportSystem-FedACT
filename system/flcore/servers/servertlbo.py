@@ -236,16 +236,16 @@ class FedTLBO(Server):
         print(f"{'='*60}\n")
     
     def train(self):
+        import sys
         for rnd in range(1, self.global_rounds + 1):
             t0 = time.time()
+            
+            # 实时显示当前轮次（不换行，覆盖显示）
+            print(f"\r[Round {rnd}/{self.global_rounds}] 正在训练...", end="", flush=True)
             
             # 选择客户端
             self.selected_clients = self.select_clients()
             self.send_models()
-            
-            if rnd % self.eval_gap == 0:
-                print(f"\n[Round {rnd}/{self.global_rounds}]")
-                self.evaluate()
             
             # 收集梯度 (攻击在客户端 train_and_get_gradient 中执行)
             gradients, client_ids = self._collect_gradients()
@@ -268,6 +268,8 @@ class FedTLBO(Server):
                 self._apply_gradient(aggregated)
             
             if rnd % self.eval_gap == 0:
+                print(f"\r[Round {rnd}/{self.global_rounds}]" + " " * 30)  # 清除行
+                self.evaluate()
                 if self.defense_mode == 'fedact':
                     print(f"  检测: 正常={len(normal_ids)}, 异常={len(anomaly_ids)}")
                 print(f"  耗时: {time.time()-t0:.2f}s")
@@ -293,10 +295,14 @@ class FedTLBO(Server):
         """
         gradients, client_ids = [], []
         benign_gradients = []
+        total_clients = len(self.selected_clients)
         
         # 第一步：诚实客户端训练
+        client_count = 0
         for c in self.selected_clients:
             if not c.is_malicious:
+                client_count += 1
+                print(f"\r  客户端训练 {client_count}/{total_clients}...", end="", flush=True)
                 grad = c.train_and_get_gradient()
                 gradients.append(grad)
                 client_ids.append(c.id)
@@ -305,12 +311,15 @@ class FedTLBO(Server):
         # 第二步：恶意客户端训练（攻击在这里执行）
         for c in self.selected_clients:
             if c.is_malicious:
+                client_count += 1
+                print(f"\r  客户端训练 {client_count}/{total_clients}...", end="", flush=True)
                 if hasattr(c, 'set_benign_gradients') and benign_gradients:
                     c.set_benign_gradients(benign_gradients)
                 grad = c.train_and_get_gradient()  # 攻击在这里执行
                 gradients.append(grad)
                 client_ids.append(c.id)
         
+        print(f"\r  客户端训练完成 ({total_clients})     ", end="", flush=True)
         return gradients, client_ids
     
     def _fedact_aggregate(
