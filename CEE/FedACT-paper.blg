@@ -1,0 +1,50 @@
+This is BibTeX, Version 0.99d (TeX Live 2025)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: FedACT-paper.aux
+The style file: cas-model2-names.bst
+Database file #1: FedACT-refs.bib
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Warning--empty pages in Cao:2021
+Warning--empty pages in Shejwalkar:2021
+You've used 36 entries,
+            2990 wiz_defined-function locations,
+            970 strings with 13577 characters,
+and the built_in function-call counts, 27770 in all, are:
+= -- 2223
+> -- 1120
+< -- 20
++ -- 445
+- -- 393
+* -- 2917
+:= -- 3892
+add.period$ -- 90
+call.type$ -- 36
+change.case$ -- 308
+chr.to.int$ -- 36
+cite$ -- 38
+duplicate$ -- 2043
+empty$ -- 1978
+format.name$ -- 509
+if$ -- 5367
+int.to.chr$ -- 1
+int.to.str$ -- 1
+missing$ -- 373
+newline$ -- 177
+num.names$ -- 144
+pop$ -- 761
+preamble$ -- 1
+purify$ -- 274
+quote$ -- 0
+skip$ -- 771
+stack$ -- 0
+substring$ -- 1354
+swap$ -- 1489
+text.length$ -- 16
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 318
+warning$ -- 2
+while$ -- 180
+width$ -- 0
+write$ -- 493
+(There were 2 warnings)

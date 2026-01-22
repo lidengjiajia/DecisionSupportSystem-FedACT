@@ -94,6 +94,7 @@ class FedTLBO(Server):
         else:
             # 使用其他防御策略
             self.fedact_defense = None
+            # 所有防御方法防御过后都采用TLBO聚合
             self.use_tlbo = getattr(args, 'use_tlbo', True)
             
             if self.defense_mode not in ['none', 'fedavg']:

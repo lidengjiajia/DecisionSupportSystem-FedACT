@@ -174,7 +174,13 @@ def run(args):
 
     # 输出统计信息
     print(f"\n平均训练时间: {round(np.average(time_list), 2)}秒")
-    average_data(dataset=args.dataset, algorithm=args.algorithm, goal=args.goal, times=args.times)
+    
+    # 攻击防御实验不需要汇总结果文件，直接从输出解析
+    if not args.enable_attack:
+        try:
+            average_data(dataset=args.dataset, algorithm=args.algorithm, goal=args.goal, times=args.times)
+        except FileNotFoundError as e:
+            print(f"[WARNING] 跳过结果汇总: {e}")
 
 
 def get_args():

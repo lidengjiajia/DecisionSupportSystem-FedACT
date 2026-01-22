@@ -199,7 +199,7 @@ def build_command(dataset: str, defense: str, attack: str, ratio: float, run: in
     
     cmd = [
         sys.executable,
-        str(SYSTEM_DIR / "main.py"),
+        str(SYSTEM_DIR / "flcore" / "main.py"),
         "-data", dataset,
         "-algo", "FedTLBO",  # 统一使用TLBO聚合
         "-nc", str(TRAIN_PARAMS["num_clients"]),

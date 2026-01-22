@@ -1,0 +1,8 @@
+实验: Xinwang_trim_attack_r30_MultiKrum_run5
+GPU: 0
+时间: 2026-01-22 23:22:24
+命令: C:\Users\李登佳\AppData\Local\Programs\Python\Python313\python.exe C:\Users\李登佳\Documents\工作\小论文\乔运城\DecisionSupportSystem\system\main.py -data Xinwang -algo FedTLBO -nc 10 -gr 100 -ls 5 -lbs 64 -lr 0.01 -eg 10 -t 5 --enable_attack True --attack_mode trim_attack --malicious_ratio 0.3 --defense_mode multi_krum --use_tlbo True --tlbo_iterations 10 --use_autoencoder False --use_committee False
+
+
+===STDERR===
+C:\Users\李登佳\AppData\Local\Programs\Python\Python313\python.exe: can't open file 'C:\\Users\\李登佳\\Documents\\工作\\小论文\\乔运城\\DecisionSupportSystem\\system\\main.py': [Errno 2] No such file or directory

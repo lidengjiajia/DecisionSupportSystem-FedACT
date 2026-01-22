@@ -550,12 +550,12 @@ The third stage aggregates verified normal gradients using Teaching-Learning-Bas
 
 TLBO operates on a population of candidate solutions. We treat each verified normal gradient as a learner and iteratively refine them toward optimal aggregation. Let $\mathcal{N}'$ denote the verified normal set after committee voting.
 
-\textbf{Fitness function.} We evaluate gradient quality using validation loss:
+\textbf{Fitness function.} We evaluate gradient quality using cosine similarity to the target (weighted mean of verified normal gradients):
 \begin{equation}
-f(\mathbf{g}) = -\mathcal{L}_{val}(\mathbf{w}^{(t)} - \eta \mathbf{g})
+f(\mathbf{g}) = \cos(\mathbf{g}, \boldsymbol{\tau}), \quad \boldsymbol{\tau} = \sum_{i \in \mathcal{N}'} w_i \mathbf{g}_i
 \label{eq:fitness}
 \end{equation}
-where $\mathcal{L}_{val}$ is computed on a small server-side validation set. Higher fitness indicates gradients producing better model updates.
+where $\boldsymbol{\tau}$ is the weighted average of verified normal gradients. Higher fitness indicates gradients more aligned with the consensus direction.
 
 \textbf{Teacher phase.} Each gradient learns from the best-performing gradient (teacher):
 \begin{equation}
@@ -598,9 +598,11 @@ where $r_i$ is client $i$'s reputation score.
 \begin{algorithmic}[1]
 \Require Verified normal gradients $\{\mathbf{g}_i\}_{i \in \mathcal{N}'}$, reputations $\{r_i\}$, iterations $T_{TLBO}=10$
 \Ensure Aggregated gradient $\mathbf{g}_{agg}$
-\State Initialize population $\mathcal{P} \gets \{\mathbf{g}_i\}_{i \in \mathcal{N}'}$
+\State $w_i \gets r_i / \sum_{j \in \mathcal{N}'} r_j$ for each $i$ \Comment{Reputation weights}
+\State $\boldsymbol{\tau} \gets \sum_{i} w_i \cdot \mathbf{g}_i$ \Comment{Target: weighted average}
+\State Initialize learners $\mathcal{P} \gets \{\mathbf{g}_i\}_{i \in \mathcal{N}'}$
 \For{$t = 1$ to $T_{TLBO}$}
-    \State Compute fitness $f(\mathbf{g}) = -\mathcal{L}_{val}(\mathbf{w}^{(t)} - \eta \mathbf{g})$ for all $\mathbf{g} \in \mathcal{P}$
+    \State Compute fitness $f(\mathbf{g}) = \cos(\mathbf{g}, \boldsymbol{\tau})$ for all $\mathbf{g} \in \mathcal{P}$
     \State \textbf{// Teacher Phase}
     \State $\mathbf{g}_{teacher} \gets \arg\max_{\mathbf{g} \in \mathcal{P}} f(\mathbf{g})$
     \State $\boldsymbol{\mu}_g \gets \frac{1}{|\mathcal{P}|} \sum_{\mathbf{g} \in \mathcal{P}} \mathbf{g}$
@@ -623,9 +625,9 @@ where $r_i$ is client $i$'s reputation score.
             \State $\mathbf{g}_i \gets \mathbf{g}_i^{new}$
         \EndIf
     \EndFor
+    \State $\boldsymbol{\tau} \gets \frac{1}{|\mathcal{P}|} \sum_{\mathbf{g} \in \mathcal{P}} \mathbf{g}$ \Comment{Update target}
 \EndFor
-\State $w_i \gets r_i / \sum_{j \in \mathcal{N}'} r_j$ for each $i \in \mathcal{N}'$
-\State $\mathbf{g}_{agg} \gets \sum_{i \in \mathcal{N}'} w_i \cdot \mathbf{g}_i$
+\State $\mathbf{g}_{agg} \gets \boldsymbol{\tau}$
 \State \Return $\mathbf{g}_{agg}$
 \end{algorithmic}
 \end{algorithm}
@@ -996,11 +998,7 @@ Backdoor & 0.702 & 0.758 & 0.769 & 0.708 & 0.732 & 0.742 & 0.790 & \textbf{0.802
 \item Krum and Multi-Krum perform poorly under heterogeneity (87.6\% and 90.6\% accuracy preservation respectively). The IID assumption violation causes Krum to select gradients from minority institutions, which may be atypical but not malicious, while excluding genuinely Byzantine gradients that happen to be closer to the centroid.
 \item Bulyan improves upon Krum (91.7\% preservation) but still underperforms trust-based methods due to inherited IID assumptions.
 \item FLTrust achieves second-best performance (97.7\% preservation) by using server-side reference data to calibrate trust scores. However, this requires the server to possess representative labeled data---a significant practical constraint in cross-institutional settings where data sharing is precisely what FL aims to avoid.
-\item FedACT achieves 98.8\% accuracy preservation without requiring server-side data, outperforming FLTrust by 1.1\% while removing the data requirement. The improvement comes from the adaptive autoencoder that learns gradient manifolds directly from participant updates rather than relying on potentially unrepresentative server data.
-\item Robust statistics methods (Median, TrimMean) struggle with sophisticated attacks, losing 6-8\% accuracy.
-\item Krum performs worst among defenses under heterogeneity (87.6\% preservation) due to IID assumption violation.
-\item FLTrust achieves second-best performance (97.7\%) but requires server-side data.
-\item FedACT achieves 98.8\% accuracy preservation without server data requirement.
+\item FedACT achieves 98.8\% accuracy preservation without requiring server-side data, outperforming FLTrust by 1.1\% while removing the data requirement.
 \end{itemize}
 
 \subsection{Robustness Under Heterogeneity (RQ3)}

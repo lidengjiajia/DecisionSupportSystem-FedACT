@@ -302,7 +302,9 @@ def run_single_experiment(
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     
-    system_dir = Path(cmd[1]).parent if len(cmd) > 1 else Path.cwd()
+    # main.py 在 system/flcore/main.py，工作目录应是 system
+    main_py_path = Path(cmd[1]) if len(cmd) > 1 else Path.cwd()
+    system_dir = main_py_path.parent.parent  # system/flcore -> system
     env["PYTHONPATH"] = str(system_dir)
     
     try:
@@ -347,26 +349,39 @@ def parse_experiment_results(output: str) -> Dict:
         "f1": 0.0,
     }
     
+    # 从后向前遍历，找最后一轮的结果
     for line in reversed(output.split('\n')):
         line_l = line.lower()
         try:
-            if "accuracy:" in line_l:
+            # 匹配 "Averaged Test Accuracy: 0.5856" 格式
+            if "test accuracy:" in line_l or "accuracy:" in line_l:
                 val = line.split(":")[-1].split(",")[0].strip().replace("%", "")
-                metrics["accuracy"] = float(val)
-            if "auc:" in line_l:
-                val = line.split("AUC:")[-1].split(",")[0].strip()
-                metrics["auc"] = float(val)
-            if "precision:" in line_l:
+                if metrics["accuracy"] == 0.0:
+                    metrics["accuracy"] = float(val)
+            if "test auc:" in line_l or "auc:" in line_l:
                 val = line.split(":")[-1].split(",")[0].strip()
-                metrics["precision"] = float(val)
-            if "recall:" in line_l:
+                if metrics["auc"] == 0.0:
+                    metrics["auc"] = float(val)
+            if "test precision:" in line_l or "precision:" in line_l:
                 val = line.split(":")[-1].split(",")[0].strip()
-                metrics["recall"] = float(val)
-            if "f1" in line_l and "f1:" in line_l:
+                if metrics["precision"] == 0.0:
+                    metrics["precision"] = float(val)
+            if "test recall:" in line_l or "recall:" in line_l:
                 val = line.split(":")[-1].split(",")[0].strip()
-                metrics["f1"] = float(val)
+                if metrics["recall"] == 0.0:
+                    metrics["recall"] = float(val)
+            if "f1-score:" in line_l or "f1:" in line_l:
+                val = line.split(":")[-1].split(",")[0].strip()
+                if metrics["f1"] == 0.0:
+                    metrics["f1"] = float(val)
         except:
             pass
+    
+    # 如果仍然是0，检查是否有错误输出表明实验根本没运行成功
+    if all(v == 0.0 for v in metrics.values()):
+        # 检查是否有错误信息
+        if "error" in output.lower() or "exception" in output.lower():
+            pass  # 保持为0
     
     return metrics
 
