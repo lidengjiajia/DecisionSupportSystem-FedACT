@@ -188,27 +188,27 @@ class Server(object):
             server_param.data += client_param.data.clone() * w
 
     def save_global_model(self):
-        model_path = os.path.join("system", "models", self.dataset)
+        model_path = os.path.join("models", self.dataset)
         if not os.path.exists(model_path):
             os.makedirs(model_path)
         model_path = os.path.join(model_path, self.algorithm + "_server" + ".pt")
         torch.save(self.global_model, model_path)
 
     def load_model(self):
-        model_path = os.path.join("system", "models", self.dataset)
+        model_path = os.path.join("models", self.dataset)
         model_path = os.path.join(model_path, self.algorithm + "_server" + ".pt")
         assert (os.path.exists(model_path))
         self.global_model = torch.load(model_path)
 
     def model_exists(self):
-        model_path = os.path.join("system", "models", self.dataset)
+        model_path = os.path.join("models", self.dataset)
         model_path = os.path.join(model_path, self.algorithm + "_server" + ".pt")
         return os.path.exists(model_path)
         
     def save_results(self):
-        # 创建子目录结构: system/results/{dataset}_{algorithm}_{goal}/
+        # 创建子目录结构: results/{dataset}_{algorithm}_{goal}/
         algo_folder = f"{self.dataset}_{self.algorithm}_{self.goal}"
-        result_path = os.path.join("system", "results", algo_folder)
+        result_path = os.path.join("results", algo_folder)
         if not os.path.exists(result_path):
             os.makedirs(result_path)
         result_path = result_path + os.sep

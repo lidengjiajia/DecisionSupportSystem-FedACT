@@ -126,6 +126,7 @@ class FedTLBO(Server):
         # 统计（每轮记录）
         self.detection_stats = []  # 每轮的 TP/TN/FP/FN 记录
         self.cumulative_stats = {'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0}  # 累积统计
+        self.stats = {'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0}  # 用于_update_stats和_print_stats
         
         self._print_config()
     

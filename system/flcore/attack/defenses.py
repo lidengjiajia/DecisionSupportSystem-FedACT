@@ -624,39 +624,127 @@ class TLBODefense(BaseDefense):
 
 class GradientDetector(torch.nn.Module):
     """
-    基于自编码器的梯度异常检测
+    基于自编码器的梯度异常检测器
     
-    原理:
-    - 自编码器学习压缩和重构正常梯度
-    - 正常梯度 → 重构误差小
-    - 异常梯度 → 重构误差大（无法被正确重构）
+    ==================== 设计原理 ====================
     
-    自适应特性:
-    - 根据梯度维度自动调整网络结构
-    - 支持配置潜在空间维度
+    自编码器 (Autoencoder) 是一种无监督学习方法，通过学习数据的压缩表示来检测异常。
+    
+    核心思想:
+    1. 编码器将高维梯度压缩到低维潜在空间
+    2. 解码器从潜在空间重构原始梯度
+    3. 正常梯度 → 重构误差小（模型已学习正常模式）
+    4. 异常梯度 → 重构误差大（无法被正确重构）
+    
+    ==================== 网络架构设计 ====================
+    
+    架构: 对称自编码器 (Symmetric Autoencoder)
+    
+    编码器结构:
+        Input(D) → Linear → LayerNorm → LeakyReLU → Dropout → 
+                 → Linear → LayerNorm → LeakyReLU → Dropout →
+                 → Linear → Latent(L)
+    
+    解码器结构 (镜像):
+        Latent(L) → Linear → LayerNorm → LeakyReLU → Dropout →
+                  → Linear → LayerNorm → LeakyReLU → Dropout →
+                  → Linear → Output(D)
+    
+    设计选择依据:
+    
+    1. LayerNorm vs BatchNorm:
+       - 使用 LayerNorm 因为梯度样本数少（客户端数=10-50）
+       - BatchNorm 需要较大 batch size，不适合联邦场景
+       - 参考: "Layer Normalization", Ba et al., 2016
+    
+    2. LeakyReLU vs ReLU:
+       - LeakyReLU 避免神经元死亡问题
+       - negative_slope=0.2 是常用设置
+       - 参考: "Rectifier Nonlinearities Improve Neural Network Acoustic Models", Maas et al., 2013
+    
+    3. Dropout:
+       - 防止过拟合，提高泛化能力
+       - dropout=0.1-0.2 适合小数据集
+       - 参考: "Dropout: A Simple Way to Prevent Neural Networks from Overfitting", Srivastava et al., 2014
+    
+    4. 维度压缩比:
+       - 每层压缩 8x (aggressive reduction)
+       - 潜在维度 32-128 根据输入规模自适应
+       - 压缩比过大会丢失信息，过小会保留噪声
+       - 参考: "Auto-Encoding Variational Bayes", Kingma & Welling, 2014
+    
+    ==================== 异常分数计算 ====================
+    
+    异常分数 = 0.7 × 重构误差 + 0.3 × 潜在空间距离
+    
+    - 重构误差: MSE(x, x̂)，衡量重构质量
+    - 潜在空间距离: ||z - center||，衡量与正常分布中心的距离
+    - 加权组合提高检测鲁棒性
+    
+    ==================== 内存优化策略 ====================
+    
+    问题: 大模型梯度维度可能达到数百万，直接处理会OOM
+    
+    解决方案: 随机采样降维
+    - 设置 MAX_INPUT_DIM = 10000
+    - 当梯度维度 > MAX_INPUT_DIM 时，随机采样固定维度
+    - 使用固定种子保证可复现性
+    
+    理论支持: 
+    - Johnson-Lindenstrauss 引理保证随机投影保持距离关系
+    - 参考: "An elementary proof of a theorem of Johnson and Lindenstrauss", Dasgupta & Gupta, 2003
+    
+    ==================== 参数配置 ====================
+    
+    根据梯度维度自动选择配置:
+    - small (< 5000):  latent_dim=32,  hidden_layers=1, dropout=0.1
+    - medium (5000-10000): latent_dim=64,  hidden_layers=2, dropout=0.2
+    - large (> 10000): latent_dim=128, hidden_layers=2, dropout=0.2
+    
+    ==================== 参考文献 ====================
+    
+    [1] Hinton & Salakhutdinov, "Reducing the Dimensionality of Data with Neural Networks", Science 2006
+    [2] Sakurada & Yairi, "Anomaly Detection Using Autoencoders with Nonlinear Dimensionality Reduction", MLSDA 2014
+    [3] An & Cho, "Variational Autoencoder based Anomaly Detection using Reconstruction Probability", SNU 2015
     """
+    
+    # 最大输入维度限制（避免OOM）
+    MAX_INPUT_DIM = 10000
     
     # 不同数据集/模型规模的推荐配置
     CONFIGS = {
-        'small': {'latent_dim': 32, 'hidden_layers': 1, 'dropout': 0.1},   # 梯度维度 < 10000
-        'medium': {'latent_dim': 64, 'hidden_layers': 2, 'dropout': 0.2},  # 梯度维度 10000-100000
-        'large': {'latent_dim': 128, 'hidden_layers': 3, 'dropout': 0.3},  # 梯度维度 > 100000
+        'small': {'latent_dim': 32, 'hidden_layers': 1, 'dropout': 0.1},   # 梯度维度 < 5000
+        'medium': {'latent_dim': 64, 'hidden_layers': 2, 'dropout': 0.2},  # 梯度维度 5000-10000
+        'large': {'latent_dim': 128, 'hidden_layers': 2, 'dropout': 0.2},  # 梯度维度 > 10000 (采样后)
     }
     
     @classmethod
     def auto_config(cls, input_dim: int) -> dict:
         """根据输入维度自动选择配置"""
-        if input_dim < 10000:
+        if input_dim < 5000:
             return cls.CONFIGS['small']
-        elif input_dim < 100000:
+        elif input_dim <= cls.MAX_INPUT_DIM:
             return cls.CONFIGS['medium']
         else:
             return cls.CONFIGS['large']
     
     def __init__(self, input_dim: int, latent_dim: int = None, 
                  hidden_layers: int = None, dropout: float = None,
-                 auto_adapt: bool = True):
+                 auto_adapt: bool = True, max_input_dim: int = None):
         super().__init__()
+        
+        self.original_dim = input_dim
+        self.max_input_dim = max_input_dim or self.MAX_INPUT_DIM
+        
+        # 如果维度过大，使用采样降维
+        self.use_sampling = input_dim > self.max_input_dim
+        if self.use_sampling:
+            # 使用固定的采样索引
+            torch.manual_seed(42)
+            self.register_buffer('sample_indices', 
+                torch.randperm(input_dim)[:self.max_input_dim])
+            input_dim = self.max_input_dim
+            print(f"  GradientDetector: 梯度维度{self.original_dim} > {self.max_input_dim}, 使用采样降维")
         
         self.input_dim = input_dim
         
@@ -673,12 +761,13 @@ class GradientDetector(torch.nn.Module):
         
         self.latent_dim = latent_dim
         
-        # 构建编码器
+        # 构建编码器 - 使用更小的隐藏层
         encoder_layers = []
         current_dim = input_dim
         
         for i in range(hidden_layers):
-            next_dim = max(latent_dim, current_dim // 4)
+            # 更激进的维度缩减
+            next_dim = max(latent_dim * 2, current_dim // 8)
             encoder_layers.extend([
                 torch.nn.Linear(current_dim, next_dim),
                 torch.nn.LayerNorm(next_dim),
@@ -693,8 +782,11 @@ class GradientDetector(torch.nn.Module):
         # 构建解码器（镜像结构）
         decoder_layers = []
         current_dim = latent_dim
-        hidden_dims = [max(latent_dim, input_dim // (4 ** (hidden_layers - i))) 
-                       for i in range(hidden_layers)]
+        hidden_dims = []
+        temp_dim = input_dim
+        for i in range(hidden_layers):
+            temp_dim = max(latent_dim * 2, temp_dim // 8)
+            hidden_dims.append(temp_dim)
         hidden_dims.reverse()
         
         for next_dim in hidden_dims:
@@ -712,6 +804,12 @@ class GradientDetector(torch.nn.Module):
         self.register_buffer('center', torch.zeros(latent_dim))
         self._init_weights()
     
+    def _sample_gradients(self, x: torch.Tensor) -> torch.Tensor:
+        """对梯度进行采样降维"""
+        if self.use_sampling:
+            return x[:, self.sample_indices]
+        return x
+    
     def _init_weights(self):
         for m in self.modules():
             if isinstance(m, torch.nn.Linear):
@@ -720,7 +818,9 @@ class GradientDetector(torch.nn.Module):
                     torch.nn.init.zeros_(m.bias)
     
     def forward(self, x):
-        z = self.encoder(x)
+        # 采样降维
+        x_sampled = self._sample_gradients(x)
+        z = self.encoder(x_sampled)
         recon = self.decoder(z)
         return recon, z
     
@@ -731,25 +831,48 @@ class GradientDetector(torch.nn.Module):
         分数 = 0.7 * 重构误差 + 0.3 * 潜在空间距离
         """
         with torch.no_grad():
+            x_sampled = self._sample_gradients(x)
             recon, z = self.forward(x)
-            recon_err = F.mse_loss(recon, x, reduction='none').mean(dim=-1)
+            recon_err = F.mse_loss(recon, x_sampled, reduction='none').mean(dim=-1)
             latent_dist = torch.norm(z - self.center, dim=-1)
             return 0.7 * recon_err + 0.3 * latent_dist
     
     def fit(self, gradients: torch.Tensor, epochs: int = 20, lr: float = 1e-3):
-        """训练检测器"""
+        """
+        训练检测器
+        
+        训练策略:
+        1. 使用 Adam 优化器（适合稀疏梯度）
+        2. 损失函数: MSE 重构误差
+        3. 训练完成后更新 center（正常样本的潜在空间中心）
+        
+        Args:
+            gradients: 形状 (n_clients, grad_dim) 的梯度张量
+            epochs: 训练轮数（默认20，消融实验可调整）
+            lr: 学习率（默认1e-3）
+        """
         self.train()
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         
-        for _ in range(epochs):
-            recon, z = self.forward(gradients)
-            loss = F.mse_loss(recon, gradients)
+        # 采样降维
+        gradients_sampled = self._sample_gradients(gradients)
+        
+        for epoch in range(epochs):
+            # 前向传播
+            z = self.encoder(gradients_sampled)
+            recon = self.decoder(z)
+            
+            # 计算重构损失
+            loss = F.mse_loss(recon, gradients_sampled)
+            
+            # 反向传播
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         
+        # 更新中心点（正常梯度的潜在表示均值）
         with torch.no_grad():
-            _, z = self.forward(gradients)
+            z = self.encoder(gradients_sampled)
             self.center = z.mean(dim=0)
         
         self.eval()

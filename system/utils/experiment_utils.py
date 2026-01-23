@@ -456,24 +456,24 @@ def parse_experiment_results(output: str) -> Dict:
     for line in reversed(output.split('\n')):
         line_l = line.lower()
         try:
-            # 匹配 "Averaged Test Accuracy: 0.5856" 格式
-            if "test accuracy:" in line_l or "accuracy:" in line_l:
+            # 只匹配 "Averaged Test ..." 格式，避免匹配 "Std Test ..."
+            if "averaged test accuracy:" in line_l:
                 val = line.split(":")[-1].split(",")[0].strip().replace("%", "")
                 if metrics["accuracy"] == 0.0:
                     metrics["accuracy"] = float(val)
-            if "test auc:" in line_l or "auc:" in line_l:
+            if "averaged test auc:" in line_l:
                 val = line.split(":")[-1].split(",")[0].strip()
                 if metrics["auc"] == 0.0:
                     metrics["auc"] = float(val)
-            if "test precision:" in line_l or "precision:" in line_l:
+            if "averaged test precision:" in line_l:
                 val = line.split(":")[-1].split(",")[0].strip()
                 if metrics["precision"] == 0.0:
                     metrics["precision"] = float(val)
-            if "test recall:" in line_l or "recall:" in line_l:
+            if "averaged test recall:" in line_l:
                 val = line.split(":")[-1].split(",")[0].strip()
                 if metrics["recall"] == 0.0:
                     metrics["recall"] = float(val)
-            if "f1-score:" in line_l or "f1:" in line_l:
+            if "averaged test f1-score:" in line_l:
                 val = line.split(":")[-1].split(",")[0].strip()
                 if metrics["f1"] == 0.0:
                     metrics["f1"] = float(val)
