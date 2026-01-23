@@ -512,6 +512,109 @@ def save_incremental_results(results: List[Dict], results_dir: Path, detail_file
         pd.DataFrame(results).to_excel(detail_path, index=False)
 
 
+def generate_detection_summary_excel(stats_dir: str = 'results/检测统计', 
+                                      output_file: str = 'results/检测统计/汇总.xlsx'):
+    """
+    生成检测统计汇总Excel
+    
+    汇总所有实验的检测结果，按 "数据集_异质性" 分sheet
+    
+    Args:
+        stats_dir: 检测统计JSON文件所在目录
+        output_file: 输出的汇总Excel文件路径
+        
+    Returns:
+        生成的Excel文件路径
+    """
+    import json
+    import pandas as pd
+    from pathlib import Path
+    
+    stats_path = Path(stats_dir)
+    if not stats_path.exists():
+        print(f"❌ 目录不存在: {stats_dir}")
+        return None
+    
+    # 收集所有JSON文件
+    json_files = list(stats_path.glob('*_stats.json'))
+    if not json_files:
+        print(f"❌ 未找到统计文件: {stats_dir}")
+        return None
+    
+    # 按 数据集_异质性 分组
+    grouped_data = {}  # key: "数据集_异质性", value: list of records
+    
+    for json_file in json_files:
+        try:
+            with open(json_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            config = data.get('config', {})
+            dataset = config.get('dataset', 'unknown')
+            heterogeneity = config.get('heterogeneity', 'iid')
+            defense_mode = config.get('defense_mode', 'unknown')
+            attack_mode = config.get('attack_mode', 'none')
+            
+            # 生成sheet名
+            sheet_name = f"{dataset}_{heterogeneity}"
+            
+            # 准备记录
+            cumulative = data.get('cumulative', {})
+            overall = data.get('overall_metrics', {})
+            
+            record = {
+                '防御方法': defense_mode,
+                '攻击类型': attack_mode,
+                '恶意比例': config.get('malicious_ratio', 0),
+                'TP': cumulative.get('tp', 0),
+                'FP': cumulative.get('fp', 0),
+                'TN': cumulative.get('tn', 0),
+                'FN': cumulative.get('fn', 0),
+                'Precision': round(overall.get('precision', 0), 4),
+                'Recall': round(overall.get('recall', 0), 4),
+                'Accuracy': round(overall.get('accuracy', 0), 4),
+            }
+            
+            # 计算F1
+            prec = overall.get('precision', 0)
+            rec = overall.get('recall', 0)
+            f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0
+            record['F1'] = round(f1, 4)
+            
+            if sheet_name not in grouped_data:
+                grouped_data[sheet_name] = []
+            grouped_data[sheet_name].append(record)
+            
+        except Exception as e:
+            print(f"⚠️ 读取失败 {json_file}: {e}")
+            continue
+    
+    if not grouped_data:
+        print("❌ 没有有效的统计数据")
+        return None
+    
+    # 写入Excel（多sheet）
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            for sheet_name, records in sorted(grouped_data.items()):
+                df = pd.DataFrame(records)
+                # 按防御方法和攻击类型排序
+                if '防御方法' in df.columns and '攻击类型' in df.columns:
+                    df = df.sort_values(['防御方法', '攻击类型'])
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+        
+        print(f"✅ 汇总Excel已生成: {output_path}")
+        print(f"   包含 {len(grouped_data)} 个sheet: {', '.join(sorted(grouped_data.keys()))}")
+        return str(output_path)
+        
+    except Exception as e:
+        print(f"❌ 生成Excel失败: {e}")
+        return None
+
+
 if __name__ == "__main__":
     gpu_info = get_gpu_info()
     print_gpu_info(gpu_info)
