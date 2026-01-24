@@ -487,8 +487,8 @@ def run_all_attack_defense_experiments():
         except:
             pass
     
-    # 7. 串行运行剩余实验（Windows上更稳定）
-    all_results = runner.run_experiments_sequential(
+    # 7. 并发运行剩余实验（Linux上使用多GPU并发）
+    all_results = runner.run_experiments_concurrent(
         remaining,
         run_single_experiment,
         existing_results,
