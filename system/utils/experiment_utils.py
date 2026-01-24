@@ -257,6 +257,9 @@ class ExperimentRunner:
             gpu_allocation[gid] = gpu_allocation.get(gid, 0) + 1
         self.log(f"GPU分配情况: {dict(sorted(gpu_allocation.items()))}")
         
+        # 转换为字符串，避免 ProcessPoolExecutor 序列化问题
+        logs_dir_str = str(self.logs_dir)
+        
         with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
             future_to_exp = {}
             for exp in experiments:
@@ -266,7 +269,7 @@ class ExperimentRunner:
                     exp['cmd'],
                     exp['name'],
                     exp['gpu_id'],  # 使用预分配的 gpu_id
-                    self.logs_dir,
+                    logs_dir_str,   # 使用字符串路径
                 )
                 future_to_exp[future] = exp
             
@@ -352,6 +355,9 @@ class ExperimentRunner:
             gpu_allocation[gid] = gpu_allocation.get(gid, 0) + 1
         self.log(f"GPU分配情况: {dict(sorted(gpu_allocation.items()))}")
         
+        # 转换为字符串
+        logs_dir_str = str(self.logs_dir)
+        
         # 使用 tqdm 显示进度条
         pbar = tqdm(experiments, desc="实验进度", unit="exp",
                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
@@ -364,7 +370,7 @@ class ExperimentRunner:
                     exp['cmd'],
                     exp['name'],
                     gpu_id,
-                    self.logs_dir,
+                    logs_dir_str,
                 )
             except Exception as e:
                 result = {"name": exp['name'], "success": False, "error": str(e)}
@@ -411,19 +417,21 @@ def run_single_experiment(
     Args:
         cmd: 命令列表
         exp_name: 实验名称
-        gpu_id: 要使用的GPU编号（物理GPU ID，如0, 1, 2, 3）
+        gpu_id: 要使用的GPU编号（物理GPU ID，如0, 1, 2, 3, 4）
         logs_dir: 日志目录
     
     Returns:
         dict: 实验结果
     """
-    log_file = logs_dir / f"{exp_name}.log"
+    log_file = Path(logs_dir) / f"{exp_name}.log"
     
     start_time = time.time()
+    
+    # 创建干净的环境变量副本
     env = os.environ.copy()
     
     # 关键：设置 CUDA_VISIBLE_DEVICES 为指定的物理GPU ID
-    # 这样子进程中的 torch.cuda.device(0) 实际上会使用物理GPU {gpu_id}
+    # 必须是字符串类型
     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     
     # main.py 在 system/flcore/main.py，工作目录应是 system
@@ -444,6 +452,9 @@ def run_single_experiment(
     fixed_cmd = cmd.copy()
     fixed_cmd[1] = relative_main_py
     
+    # 调试：打印GPU分配信息
+    print(f"[DEBUG] {exp_name}: 分配GPU={gpu_id}, CUDA_VISIBLE_DEVICES={env['CUDA_VISIBLE_DEVICES']}")
+    
     try:
         result = subprocess.run(
             fixed_cmd, capture_output=True, text=True, timeout=7200,
@@ -453,7 +464,7 @@ def run_single_experiment(
         with open(log_file, 'w', encoding='utf-8') as f:
             f.write(f"实验: {exp_name}\n")
             f.write(f"物理GPU ID: {gpu_id}\n")
-            f.write(f"CUDA_VISIBLE_DEVICES: {gpu_id}\n")
+            f.write(f"CUDA_VISIBLE_DEVICES: {env['CUDA_VISIBLE_DEVICES']}\n")
             f.write(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"命令: {' '.join(fixed_cmd)}\n")
             f.write(f"工作目录: {system_dir}\n\n")

@@ -115,10 +115,11 @@ from pathlib import Path
 from collections import defaultdict
 
 # 添加当前目录到路径
-sys.path.insert(0, str(Path(__file__).parent.absolute()))
-sys.path.insert(0, str(Path(__file__).parent.absolute() / "system"))
+BASE_DIR = Path(__file__).parent.absolute()
+sys.path.insert(0, str(BASE_DIR))
+sys.path.insert(0, str(BASE_DIR / "system"))
 
-from utils.experiment_utils import (
+from system.utils.experiment_utils import (
     get_gpu_info, print_gpu_info,
     check_completed_experiments, print_progress_info,
     ExperimentRunner, run_single_experiment, save_incremental_results,
@@ -128,7 +129,7 @@ from utils.experiment_utils import (
 # ================================================================================
 # 路径配置
 # ================================================================================
-BASE_DIR = Path(__file__).parent.absolute()
+# BASE_DIR 已在上面定义
 SYSTEM_DIR = BASE_DIR / "system"
 LOGS_DIR = BASE_DIR / "logs" / "ablation"
 RESULTS_DIR = SYSTEM_DIR / "results" / "汇总"
