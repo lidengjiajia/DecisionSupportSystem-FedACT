@@ -1,0 +1,120 @@
+实验: Uci_sign_flip_r30_FedACT_run1
+GPU: 2
+时间: 2026-01-23 01:07:51
+命令: /miniconda3/bin/python /root/DecisionSupportSystem-FedACT/system/flcore/main.py -data Uci -algo FedTLBO -nc 10 -gr 100 -ls 5 -lbs 64 -lr 0.01 -eg 10 -t 1 --enable_attack True --attack_mode sign_flip --malicious_ratio 0.3 --defense_mode fedact --use_tlbo True --tlbo_iterations 10 --use_autoencoder True --use_committee True --committee_size 5
+
+============================================================
+实验配置:
+============================================================
+  goal: test
+  device: cuda
+  device_id: 2
+  dataset: Uci
+  heterogeneity: iid
+  model: auto
+  num_classes: 2
+  batch_size: 64
+  local_learning_rate: 0.01
+  global_rounds: 100
+  local_epochs: 5
+  algorithm: FedTLBO
+  num_clients: 10
+  join_ratio: 1.0
+  random_join_ratio: False
+  prev: 0
+  times: 1
+  eval_gap: 10
+  save_folder_name: results
+  learning_rate_decay: False
+  learning_rate_decay_gamma: 0.99
+  few_shot: 0
+  time_select: False
+  time_threthold: 10000
+  top_cnt: 100
+  auto_break: False
+  client_drop_rate: 0.0
+  train_slow_rate: 0.0
+  send_slow_rate: 0.0
+  dlg_eval: False
+  dlg_gap: 100
+  batch_num_per_client: 2
+  num_new_clients: 0
+  fine_tuning_epoch_new: 0
+  mu: 0.01
+  beta: 0.0
+  lamda: 1.0
+  tau: 1.0
+  plocal_epochs: 1
+  server_learning_rate: 1.0
+  enable_attack: True
+  attack_mode: sign_flip
+  malicious_ratio: 0.3
+  attack_scale: 3.0
+  defense_mode: fedact
+  use_autoencoder: True
+  autoencoder_latent_dim: 64
+  autoencoder_epochs: 20
+  committee_size: 5
+  vote_threshold: 0.5
+  anomaly_threshold: 0.5
+  anomaly_lower_coef: 0.7
+  anomaly_upper_coef: 1.5
+  use_committee: True
+  tlbo_iterations: 10
+  use_tlbo: True
+  use_merkle: True
+  use_incentive: True
+============================================================
+
+============= 第 1 次实验 =============
+正在初始化服务器和客户端...
+数据集: Uci, 特征维度: 23
+模型参数量: 189,330
+
+============================================================
+FedACT Server
+============================================================
+客户端: 10, 轮数: 100
+防御模式: fedact
+  - 委员会大小: 5
+  - TLBO迭代: 10
+  - 阈值系数: [0.7, 1.5]
+  - 组件开关: AE=True, Committee=True, TLBO=True
+攻击模式: sign_flip (恶意客户端: 3)
+============================================================
+
+
+[Round 1/100] 正在训练...
+  客户端训练 1/10...
+  客户端训练 2/10...
+  客户端训练 3/10...
+  客户端训练 4/10...
+  客户端训练 5/10...
+  客户端训练 6/10...
+  客户端训练 7/10...
+  客户端训练 8/10...
+  客户端训练 9/10...
+  客户端训练 10/10...
+  客户端训练完成 (10)       自编码器: 输入维度=189330, 潜在维度=128
+
+===STDERR===
+Traceback (most recent call last):
+  File "/root/DecisionSupportSystem-FedACT/system/flcore/main.py", line 324, in <module>
+    run(args)
+  File "/root/DecisionSupportSystem-FedACT/system/flcore/main.py", line 172, in run
+    server.train()
+  File "/root/DecisionSupportSystem-FedACT/system/flcore/servers/servertlbo.py", line 255, in train
+    aggregated, normal_ids, anomaly_ids = self._fedact_aggregate(
+                                          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/DecisionSupportSystem-FedACT/system/flcore/servers/servertlbo.py", line 364, in _fedact_aggregate
+    defense.detector.fit(grad_tensor, epochs=defense.autoencoder_epochs)
+  File "/root/DecisionSupportSystem-FedACT/system/flcore/attack/defenses.py", line 748, in fit
+    loss.backward()
+  File "/miniconda3/lib/python3.12/site-packages/torch/_tensor.py", line 630, in backward
+    torch.autograd.backward(
+  File "/miniconda3/lib/python3.12/site-packages/torch/autograd/__init__.py", line 364, in backward
+    _engine_run_backward(
+  File "/miniconda3/lib/python3.12/site-packages/torch/autograd/graph.py", line 865, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.09 GiB. GPU 0 has a total capacity of 47.37 GiB of which 805.38 MiB is free. Process 45441 has 550.00 MiB memory in use. Process 45910 has 548.00 MiB memory in use. Process 46298 has 548.00 MiB memory in use. Including non-PyTorch memory, this process has 44.94 GiB memory in use. Of the allocated memory 44.46 GiB is allocated by PyTorch, and 23.62 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

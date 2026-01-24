@@ -9,37 +9,39 @@ FedACT: Federated Autoencoder-Committee TLBO
 联邦自编码器-委员会-TLBO框架
 
 ================================================================================
-核心设计：防御检测层与TLBO聚合层解耦
+核心设计：各防御方法使用原本的聚合方式
 ================================================================================
 
-本文提出的 FedACT 框架采用解耦设计:
-  - 防御层: 自编码器异常检测 + 委员会投票 (检测并过滤恶意梯度)
-  - 聚合层: TLBO优化聚合 (所有方法统一使用)
-
-所有防御方法都使用 TLBO 作为聚合算法，对比的是不同防御检测方法的效果：
+公平对比设计：每种防御方法使用其原本的聚合算法，本文FedACT使用TLBO聚合
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  防御方法（检测层）                    │ 聚合方法 │  说明                   │
+│  防御方法                              │ 聚合方法  │  说明                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  None (无防御)                         │   TLBO   │  基线，不过滤任何梯度   │
-│  Median (中位数)                       │   TLBO   │  每维取中位数过滤       │
-│  TrimmedMean (修剪均值)                │   TLBO   │  去除极值后平均         │
-│  Krum (NeurIPS 2017)                   │   TLBO   │  选择最近邻梯度         │
-│  MultiKrum (NeurIPS 2017)              │   TLBO   │  Krum多选择版本         │
-│  Bulyan (ICML 2018)                    │   TLBO   │  Krum+修剪均值组合      │
-│  RFA (几何中位数)                      │   TLBO   │  Weiszfeld算法          │
-│  FedACT (自编码器+委员会) ★本文方法    │   TLBO   │  AE检测+委员会投票      │
+│  None (无防御)                         │  FedAvg   │  基线，不防御直接聚合  │
+│  Median (中位数)                       │  FedAvg   │  坐标中值聚合          │
+│  TrimmedMean (修剪均值)                │  FedAvg   │  去除极值后平均        │
+│  Krum (NeurIPS 2017)                   │  FedAvg   │  选择最可信梯度        │
+│  MultiKrum (NeurIPS 2017)              │  FedAvg   │  多个可信梯度聚合      │
+│  Bulyan (ICML 2018)                    │  FedAvg   │  Krum+修剪均值组合     │
+│  RFA (几何中位数)                      │  FedAvg   │  Weiszfeld算法         │
+│  FedACT (本文方法) ★                   │  TLBO     │  AE+委员会+TLBO聚合    │
 └─────────────────────────────────────────────────────────────────────────────┘
+
+注：TLBO聚合 vs FedAvg聚合的对比实验在 run_ablation.py 消融实验中进行
+    通过 "FedACT_Full" vs "w/o_TLBO" 配置对比TLBO聚合的贡献
 
 ================================================================================
 实验配置
 ================================================================================
-- 数据集: Uci, Xinwang
+- 数据集: Uci, Xinwang (2种)
+- 异质性类型: iid, label_skew, quantity_skew, feature_skew (4种)
 - 攻击类型: 12种 (基础3种 + 前沿5种 + 其他4种)
-- 攻击比例: 0.1, 0.2, 0.3, 0.4
-- 防御方法: 8种 (全部使用TLBO聚合)
-- 重复次数: 5次
-- 总实验数: 2×12×4×8×5 = 3840次
+- 恶意客户端比例: 30% (根据审稿人意见调整)
+- 防御方法: 8种 (各自使用原本的聚合方式)
+  - 经典防御 (7种): 使用FedAvg聚合
+  - FedACT (本文): 使用TLBO聚合
+- 重复次数: 1次
+- 总实验数: 2×4×12×8×1 = 768次
 
 ================================================================================
 功能特性
@@ -75,7 +77,8 @@ sys.path.insert(0, str(Path(__file__).parent.absolute() / "system"))
 from utils.experiment_utils import (
     get_gpu_info, print_gpu_info,
     check_completed_experiments, print_progress_info,
-    ExperimentRunner, run_single_experiment, save_incremental_results
+    ExperimentRunner, run_single_experiment, save_incremental_results,
+    generate_detection_summary_excel
 )
 
 # ================================================================================
@@ -95,6 +98,14 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 # ================================================================================
 
 DATASETS = ["Uci", "Xinwang"]
+
+# 数据异质性类型 (4种)
+HETEROGENEITY_TYPES = {
+    "iid": {"name": "IID分布", "description": "独立同分布"},
+    "label_skew": {"name": "标签倾斜", "description": "客户端标签分布不均"},
+    "quantity_skew": {"name": "数量倾斜", "description": "客户端数据量不均"},
+    "feature_skew": {"name": "特征倾斜", "description": "客户端特征分布不均"},
+}
 
 # 所有攻击类型 (12种)
 ATTACK_TYPES = {
@@ -117,70 +128,87 @@ ATTACK_TYPES = {
     "collision": {"name": "共谋攻击", "category": "其他攻击", "source": "-"},
 }
 
-# 攻击比例
-ATTACK_RATIOS = [0.1, 0.2, 0.3, 0.4]
+# 攻击比例 (固定为0.3，即30%恶意客户端，根据审稿人意见调整)
+ATTACK_RATIO = 0.3
 
-# 防御方法配置 (8种，全部使用TLBO聚合)
+# 防御方法配置 (8种)
+# 注意：只有FedACT使用TLBO聚合，其他方法使用各自原本的聚合方式
 DEFENSE_METHODS = {
     "None": {
-        "name": "无防御",
+        "name": "无防御(FedAvg)",
         "category": "基线",
         "defense_mode": "none",
+        "algo": "FedAvg",  # 使用FedAvg聚合
+        "use_tlbo": False,
         "source": "-",
-        "description": "不进行任何恶意梯度检测，直接TLBO聚合",
+        "description": "不进行任何恶意梯度检测，直接FedAvg聚合",
     },
     "Median": {
-        "name": "中位数检测",
+        "name": "Median",
         "category": "经典防御",
         "defense_mode": "median",
-        "source": "-",
-        "description": "对每个维度取中位数，过滤异常值",
+        "algo": "FedAvg",  # 经典方法使用自己的聚合
+        "use_tlbo": False,
+        "source": "Yin et al., ICML 2018",
+        "description": "坐标中值聚合",
     },
     "TrimmedMean": {
-        "name": "修剪均值检测",
+        "name": "TrimmedMean",
         "category": "经典防御",
         "defense_mode": "trimmed_mean",
-        "source": "ICML 2018",
-        "description": "去除最大最小值后平均",
+        "algo": "FedAvg",
+        "use_tlbo": False,
+        "source": "Yin et al., ICML 2018",
+        "description": "修剪均值聚合",
     },
     "Krum": {
-        "name": "Krum检测",
+        "name": "Krum",
         "category": "经典防御",
         "defense_mode": "krum",
-        "source": "NeurIPS 2017",
-        "description": "选择距离其他梯度最近的梯度",
+        "algo": "FedAvg",
+        "use_tlbo": False,
+        "source": "Blanchard et al., NeurIPS 2017",
+        "description": "选择最可信的单个梯度",
     },
     "MultiKrum": {
-        "name": "Multi-Krum检测",
+        "name": "Multi-Krum",
         "category": "经典防御",
         "defense_mode": "multi_krum",
-        "source": "NeurIPS 2017",
-        "description": "Krum的多选择版本",
+        "algo": "FedAvg",
+        "use_tlbo": False,
+        "source": "Blanchard et al., NeurIPS 2017",
+        "description": "选择多个可信梯度聚合",
     },
     "Bulyan": {
-        "name": "Bulyan检测",
+        "name": "Bulyan",
         "category": "经典防御",
         "defense_mode": "bulyan",
-        "source": "ICML 2018",
-        "description": "Krum选择后再做修剪均值",
+        "algo": "FedAvg",
+        "use_tlbo": False,
+        "source": "Mhamdi et al., ICML 2018",
+        "description": "Krum选择后做修剪均值",
     },
     "RFA": {
-        "name": "RFA检测",
+        "name": "RFA",
         "category": "经典防御",
         "defense_mode": "rfa",
-        "source": "-",
+        "algo": "FedAvg",
+        "use_tlbo": False,
+        "source": "Pillutla et al., ICML 2022",
         "description": "几何中位数（Weiszfeld算法）",
     },
     "FedACT": {
         "name": "FedACT (本文)",
         "category": "本文方法",
         "defense_mode": "fedact",
+        "algo": "FedTLBO",  # 本文方法使用TLBO
+        "use_tlbo": True,
         "source": "本文",
         "description": "自编码器异常检测 + 委员会投票 + TLBO聚合",
     },
 }
 
-NUM_RUNS = 5
+NUM_RUNS = 1
 EXPERIMENTS_PER_GPU = 4
 
 TRAIN_PARAMS = {
@@ -193,15 +221,27 @@ TRAIN_PARAMS = {
 }
 
 
-def build_command(dataset: str, defense: str, attack: str, ratio: float, run: int) -> list:
-    """构建运行命令"""
+def build_command(dataset: str, defense: str, attack: str, heterogeneity: str, run: int) -> list:
+    """构建运行命令
+    
+    Args:
+        dataset: 数据集名称 (Uci/Xinwang)
+        defense: 防御方法
+        attack: 攻击类型
+        heterogeneity: 数据异质性类型 (iid/label_skew/quantity_skew/feature_skew)
+        run: 实验编号
+    """
     defense_info = DEFENSE_METHODS[defense]
+    
+    # 使用各方法自己的算法和聚合方式
+    algo = defense_info["algo"]
+    use_tlbo = defense_info["use_tlbo"]
     
     cmd = [
         sys.executable,
         str(SYSTEM_DIR / "flcore" / "main.py"),
         "-data", dataset,
-        "-algo", "FedTLBO",  # 统一使用TLBO聚合
+        "-algo", algo,
         "-nc", str(TRAIN_PARAMS["num_clients"]),
         "-gr", str(TRAIN_PARAMS["global_rounds"]),
         "-ls", str(TRAIN_PARAMS["local_epochs"]),
@@ -209,13 +249,16 @@ def build_command(dataset: str, defense: str, attack: str, ratio: float, run: in
         "-lr", str(TRAIN_PARAMS["learning_rate"]),
         "-eg", str(TRAIN_PARAMS["eval_gap"]),
         "-t", str(run),
+        # 数据异质性配置
+        "--heterogeneity", heterogeneity,
         # 攻击配置
         "--enable_attack", "True",
         "--attack_mode", attack,
-        "--malicious_ratio", str(ratio),
+        "--malicious_ratio", str(ATTACK_RATIO),  # 30%恶意客户端
         # 防御配置
         "--defense_mode", defense_info["defense_mode"],
-        "--use_tlbo", "True",  # 所有方法都用TLBO聚合
+        # 聚合方法配置
+        "--use_tlbo", str(use_tlbo),
         "--tlbo_iterations", "10",
     ]
     
@@ -236,29 +279,40 @@ def build_command(dataset: str, defense: str, attack: str, ratio: float, run: in
 
 
 def generate_all_experiments() -> list:
-    """生成所有实验配置"""
+    """生成所有实验配置
+    
+    实验设计: 2数据集 × 4异质性 × 12攻击 × 8防御 × 5次 = 3840次
+    - 数据集: Uci, Xinwang (2种)
+    - 异质性: iid, label_skew, quantity_skew, feature_skew (4种)
+    - 攻击: 12种
+    - 防御: 8种 (各自使用原本的聚合方式，FedACT用TLBO)
+    - 重复: 5次
+    """
     experiments = []
     
     for dataset in DATASETS:
-        for attack_key, attack_info in ATTACK_TYPES.items():
-            for ratio in ATTACK_RATIOS:
+        for het_key, het_info in HETEROGENEITY_TYPES.items():
+            for attack_key, attack_info in ATTACK_TYPES.items():
                 for defense_key, defense_info in DEFENSE_METHODS.items():
                     for run in range(1, NUM_RUNS + 1):
-                        exp_name = f"{dataset}_{attack_key}_r{int(ratio*100)}_{defense_key}_run{run}"
-                        cmd = build_command(dataset, defense_key, attack_key, ratio, run)
+                        exp_name = f"{dataset}_{het_key}_{attack_key}_{defense_key}_run{run}"
+                        cmd = build_command(dataset, defense_key, attack_key, het_key, run)
                         
                         experiments.append({
                             "name": exp_name,
                             "cmd": cmd,
                             "info": {
                                 "dataset": dataset,
+                                "heterogeneity": het_key,
+                                "heterogeneity_name": het_info["name"],
                                 "attack": attack_key,
                                 "attack_name": attack_info["name"],
                                 "attack_category": attack_info["category"],
-                                "attack_ratio": ratio,
                                 "defense": defense_key,
                                 "defense_name": defense_info["name"],
                                 "defense_category": defense_info["category"],
+                                "algo": defense_info["algo"],
+                                "use_tlbo": defense_info["use_tlbo"],
                                 "run": run,
                             }
                         })
@@ -275,38 +329,44 @@ def generate_attack_defense_summary(results: list):
     summary_data = defaultdict(lambda: defaultdict(list))
     for r in results:
         if r.get("success", False):
-            key = (r["dataset"], r["attack"], r["attack_ratio"], r["defense"])
+            key = (r["dataset"], r["heterogeneity"], r["attack"], r["defense"])
             summary_data[key]["accuracy"].append(r.get("accuracy", 0))
             summary_data[key]["auc"].append(r.get("auc", 0))
             summary_data[key]["f1"].append(r.get("f1", 0))
+            summary_data[key]["precision"].append(r.get("precision", 0))
+            summary_data[key]["recall"].append(r.get("recall", 0))
     
     # 构建汇总表
     rows = []
-    for (dataset, attack, ratio, defense), metrics in summary_data.items():
+    for (dataset, heterogeneity, attack, defense), metrics in summary_data.items():
+        het_info = HETEROGENEITY_TYPES.get(heterogeneity, {})
         attack_info = ATTACK_TYPES.get(attack, {})
         defense_info = DEFENSE_METHODS.get(defense, {})
         
         rows.append({
             "数据集": dataset,
+            "异质性类型": heterogeneity,
+            "异质性名称": het_info.get("name", heterogeneity),
             "攻击类型": attack,
             "攻击名称": attack_info.get("name", attack),
             "攻击类别": attack_info.get("category", ""),
-            "攻击比例": ratio,
             "防御方法": defense,
             "防御名称": defense_info.get("name", defense),
             "防御类别": defense_info.get("category", ""),
-            "Accuracy均值": round(np.mean(metrics['accuracy']), 4),
-            "Accuracy标准差": round(np.std(metrics['accuracy']), 4),
-            "Accuracy结果": f"{np.mean(metrics['accuracy']):.4f}±{np.std(metrics['accuracy']):.4f}",
-            "AUC均值": round(np.mean(metrics['auc']), 4),
-            "AUC标准差": round(np.std(metrics['auc']), 4),
-            "AUC结果": f"{np.mean(metrics['auc']):.4f}±{np.std(metrics['auc']):.4f}",
-            "F1均值": round(np.mean(metrics['f1']), 4),
+            "Accuracy均值": round(np.mean(metrics['accuracy']), 3),
+            "Accuracy标准差": round(np.std(metrics['accuracy']), 3),
+            "Accuracy结果": f"{np.mean(metrics['accuracy']):.3f}±{np.std(metrics['accuracy']):.3f}",
+            "AUC均值": round(np.mean(metrics['auc']), 3),
+            "AUC标准差": round(np.std(metrics['auc']), 3),
+            "AUC结果": f"{np.mean(metrics['auc']):.3f}±{np.std(metrics['auc']):.3f}",
+            "Precision均值": round(np.mean(metrics['precision']), 3),
+            "Recall均值": round(np.mean(metrics['recall']), 3),
+            "F1均值": round(np.mean(metrics['f1']), 3),
             "实验次数": len(metrics['accuracy']),
         })
     
     summary_df = pd.DataFrame(rows)
-    summary_df = summary_df.sort_values(["数据集", "攻击类别", "攻击类型", "攻击比例", "防御类别"])
+    summary_df = summary_df.sort_values(["数据集", "异质性类型", "攻击类别", "攻击类型", "防御类别"])
     
     # 保存Excel
     excel_path = RESULTS_DIR / "FedACT_攻击防御实验_汇总.xlsx"
@@ -319,11 +379,24 @@ def generate_attack_defense_summary(results: list):
             df_d = summary_df[summary_df["数据集"] == dataset]
             df_d.to_excel(writer, index=False, sheet_name=f"{dataset}数据集")
         
+        # 按异质性类型分Sheet
+        for het_key, het_info in HETEROGENEITY_TYPES.items():
+            df_h = summary_df[summary_df["异质性类型"] == het_key]
+            if not df_h.empty:
+                df_h.to_excel(writer, index=False, sheet_name=het_info["name"])
+        
         # 按攻击类别分Sheet
         for category in ["基础攻击", "前沿攻击", "其他攻击"]:
             df_c = summary_df[summary_df["攻击类别"] == category]
             if not df_c.empty:
                 df_c.to_excel(writer, index=False, sheet_name=category)
+        
+        # 异质性类型说明
+        het_df = pd.DataFrame([
+            {"类型": k, "名称": v["name"], "说明": v["description"]}
+            for k, v in HETEROGENEITY_TYPES.items()
+        ])
+        het_df.to_excel(writer, index=False, sheet_name="异质性类型说明")
         
         # 攻击类型说明
         attack_df = pd.DataFrame([
@@ -335,19 +408,20 @@ def generate_attack_defense_summary(results: list):
         # 防御方法说明
         defense_df = pd.DataFrame([
             {"防御": k, "名称": v["name"], "类别": v["category"], 
-             "来源": v["source"], "说明": v["description"]}
+             "算法": v["algo"], "来源": v["source"], "说明": v["description"]}
             for k, v in DEFENSE_METHODS.items()
         ])
         defense_df.to_excel(writer, index=False, sheet_name="防御方法说明")
         
         # 实验设计
+        total_exp = len(DATASETS) * len(HETEROGENEITY_TYPES) * len(ATTACK_TYPES) * len(DEFENSE_METHODS) * NUM_RUNS
         design_df = pd.DataFrame({
-            "项目": ["算法名称", "实验类型", "数据集", "攻击类型数", "攻击比例",
-                    "防御方法数", "重复次数", "总实验数"],
+            "项目": ["算法名称", "实验类型", "数据集", "异质性类型", "攻击类型数", 
+                    "恶意客户端比例", "防御方法数", "重复次数", "总实验数"],
             "内容": ["FedACT", "攻击防御实验", ", ".join(DATASETS),
-                    f"{len(ATTACK_TYPES)}种", ", ".join([str(r) for r in ATTACK_RATIOS]),
-                    f"{len(DEFENSE_METHODS)}种", f"{NUM_RUNS}次",
-                    f"{len(DATASETS)*len(ATTACK_TYPES)*len(ATTACK_RATIOS)*len(DEFENSE_METHODS)*NUM_RUNS}"]
+                    ", ".join(HETEROGENEITY_TYPES.keys()),
+                    f"{len(ATTACK_TYPES)}种", f"{ATTACK_RATIO*100:.0f}%",
+                    f"{len(DEFENSE_METHODS)}种", f"{NUM_RUNS}次", str(total_exp)]
         })
         design_df.to_excel(writer, index=False, sheet_name="实验设计")
     
@@ -357,6 +431,16 @@ def generate_attack_defense_summary(results: list):
     detail_path = RESULTS_DIR / "FedACT_攻击防御实验_详细.xlsx"
     pd.DataFrame(results).to_excel(detail_path, index=False)
     print(f"✓ 详细结果已保存: {detail_path}")
+    
+    # 生成检测统计汇总（TP/FP/TN/FN等）
+    detection_stats_dir = RESULTS_DIR.parent / "检测统计"
+    detection_summary_path = RESULTS_DIR / "FedACT_检测统计_汇总.xlsx"
+    detection_excel = generate_detection_summary_excel(
+        stats_dir=str(detection_stats_dir),
+        output_file=str(detection_summary_path)
+    )
+    if detection_excel:
+        print(f"✓ 检测统计汇总已保存: {detection_excel}")
 
 
 def run_all_attack_defense_experiments():
@@ -424,22 +508,27 @@ def print_experiment_design():
               Federated Autoencoder-Committee TLBO
 ================================================================================
   [实验目的]
-    测试 FedACT 在各种拜占庭攻击下的防御能力
+    1. 测试 FedACT 在各种拜占庭攻击下的防御能力
+    2. 与经典防御方法进行对比
+    3. 测试不同数据异质性场景下的表现
+
+  [数据异质性] 4种
+    iid, label_skew, quantity_skew, feature_skew
 
   [攻击类型] 12种
     基础攻击(3): sign_flip, gaussian, scale
     前沿攻击(5): little, alie, ipm, minmax, trim_attack
     其他攻击(4): label_flip, backdoor, free_rider, collision
 
-  [防御方法] 8种 (全部使用TLBO聚合)
-    基线: None
-    经典: Median, TrimmedMean, Krum, MultiKrum, Bulyan, RFA
-    本文: FedACT (Autoencoder + Committee + TLBO)
+  [防御方法] 8种
+    基线: None (FedAvg)
+    经典: Median, TrimmedMean, Krum, MultiKrum, Bulyan, RFA (各自聚合)
+    本文: FedACT (Autoencoder + Committee + TLBO聚合)
 
   [实验配置]
-    数据集: Uci, Xinwang
-    攻击比例: 10%, 20%, 30%, 40%
-    重复: 5次  |  总实验数: 2x12x4x8x5 = 3840次
+    数据集: Uci, Xinwang (2种)
+    恶意客户端比例: 30%
+    重复: 5次  |  总实验数: 3840次
 
   [功能特性]
     * GPU自动检测与并发执行
@@ -447,7 +536,10 @@ def print_experiment_design():
     * 断点续跑（自动跳过已完成实验）
     * 进度日志输出到 nohup.log
 
-  [结果保存] system/results/汇总/FedACT_攻击防御实验_汇总.xlsx
+  [结果保存]
+    汇总: system/results/汇总/FedACT_攻击防御实验_汇总.xlsx
+    详细: system/results/汇总/FedACT_攻击防御实验_详细.xlsx
+    日志: logs/attack_defense/
 ================================================================================
     """)
 
