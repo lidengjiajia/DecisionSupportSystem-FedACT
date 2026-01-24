@@ -244,17 +244,28 @@ class ExperimentRunner:
         self.log(f"开始运行 {total} 个实验，并发数: {self.num_workers}")
         
         gpu_count = max(1, self.gpu_info["count"])
+        
+        # 正确的GPU分配策略：确保实验均匀分布到每块GPU
+        # 例如：4块GPU，16个并发进程，实验0->GPU0, 实验1->GPU1, 实验2->GPU2, 实验3->GPU3, 实验4->GPU0...
         for i, exp in enumerate(experiments):
             exp['gpu_id'] = i % gpu_count
+        
+        # 打印GPU分配情况
+        gpu_allocation = {}
+        for exp in experiments:
+            gid = exp['gpu_id']
+            gpu_allocation[gid] = gpu_allocation.get(gid, 0) + 1
+        self.log(f"GPU分配情况: {dict(sorted(gpu_allocation.items()))}")
         
         with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
             future_to_exp = {}
             for exp in experiments:
+                # 将 gpu_id 直接传递给 run_func，确保子进程使用正确的GPU
                 future = executor.submit(
                     run_func,
                     exp['cmd'],
                     exp['name'],
-                    exp.get('gpu_id', 0),
+                    exp['gpu_id'],  # 使用预分配的 gpu_id
                     self.logs_dir,
                 )
                 future_to_exp[future] = exp
@@ -330,12 +341,23 @@ class ExperimentRunner:
         
         gpu_count = max(1, self.gpu_info["count"])
         
+        # 预分配GPU（与并发方法一致）
+        for i, exp in enumerate(experiments):
+            exp['gpu_id'] = i % gpu_count
+        
+        # 打印GPU分配情况
+        gpu_allocation = {}
+        for exp in experiments:
+            gid = exp['gpu_id']
+            gpu_allocation[gid] = gpu_allocation.get(gid, 0) + 1
+        self.log(f"GPU分配情况: {dict(sorted(gpu_allocation.items()))}")
+        
         # 使用 tqdm 显示进度条
         pbar = tqdm(experiments, desc="实验进度", unit="exp",
                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
         
         for i, exp in enumerate(pbar):
-            gpu_id = i % gpu_count
+            gpu_id = exp['gpu_id']  # 使用预分配的 gpu_id
             
             try:
                 result = run_func(
@@ -383,15 +405,28 @@ def run_single_experiment(
     gpu_id: int,
     logs_dir: Path,
 ) -> Dict:
-    """运行单个实验"""
+    """
+    运行单个实验
+    
+    Args:
+        cmd: 命令列表
+        exp_name: 实验名称
+        gpu_id: 要使用的GPU编号（物理GPU ID，如0, 1, 2, 3）
+        logs_dir: 日志目录
+    
+    Returns:
+        dict: 实验结果
+    """
     log_file = logs_dir / f"{exp_name}.log"
     
     start_time = time.time()
     env = os.environ.copy()
+    
+    # 关键：设置 CUDA_VISIBLE_DEVICES 为指定的物理GPU ID
+    # 这样子进程中的 torch.cuda.device(0) 实际上会使用物理GPU {gpu_id}
     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     
     # main.py 在 system/flcore/main.py，工作目录应是 system
-    # cmd[1] 可能是 system/flcore/main.py，需要转换为 flcore/main.py
     main_py_path = Path(cmd[1]) if len(cmd) > 1 else Path.cwd()
     
     # 获取 system 目录（绝对路径）
@@ -399,7 +434,6 @@ def run_single_experiment(
         system_dir = main_py_path.parent.parent.resolve()
         relative_main_py = "flcore/main.py"
     else:
-        # 相对路径：system/flcore/main.py -> 工作目录设为当前目录的system，脚本路径改为flcore/main.py
         system_dir = Path.cwd() / main_py_path.parent.parent
         system_dir = system_dir.resolve()
         relative_main_py = "flcore/main.py"
@@ -418,9 +452,11 @@ def run_single_experiment(
         
         with open(log_file, 'w', encoding='utf-8') as f:
             f.write(f"实验: {exp_name}\n")
-            f.write(f"GPU: {gpu_id}\n")
+            f.write(f"物理GPU ID: {gpu_id}\n")
+            f.write(f"CUDA_VISIBLE_DEVICES: {gpu_id}\n")
             f.write(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"命令: {' '.join(cmd)}\n\n")
+            f.write(f"命令: {' '.join(fixed_cmd)}\n")
+            f.write(f"工作目录: {system_dir}\n\n")
             f.write(result.stdout)
             if result.stderr:
                 f.write(f"\n===STDERR===\n{result.stderr}")

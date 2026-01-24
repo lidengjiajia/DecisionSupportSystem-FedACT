@@ -302,8 +302,18 @@ def get_args():
 
     args = parser.parse_args()
 
-    # GPU设置
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.device_id
+    # GPU设置：优先使用已设置的 CUDA_VISIBLE_DEVICES 环境变量
+    # 这样并发实验脚本可以通过环境变量分配不同的GPU
+    existing_cuda_env = os.environ.get("CUDA_VISIBLE_DEVICES", None)
+    if existing_cuda_env is not None and existing_cuda_env != "":
+        # 如果环境变量已设置（由并发脚本设置），使用它
+        # 注意：此时 torch.cuda.device(0) 对应的是环境变量指定的物理GPU
+        print(f"[GPU] 使用环境变量指定的GPU: CUDA_VISIBLE_DEVICES={existing_cuda_env}")
+    else:
+        # 否则使用命令行参数
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.device_id
+        print(f"[GPU] 使用命令行参数指定的GPU: device_id={args.device_id}")
+    
     if args.device == "cuda" and not torch.cuda.is_available():
         print("[警告] CUDA不可用，切换到CPU")
         args.device = "cpu"
