@@ -9,11 +9,19 @@ import os
 import subprocess
 import time
 import logging
+import multiprocessing
 from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import List, Dict, Callable, Any, Optional
 from tqdm import tqdm
+
+# 关键：在Linux上使用spawn方式创建子进程，避免继承父进程的CUDA上下文
+# 这样每个子进程都会重新初始化CUDA，CUDA_VISIBLE_DEVICES才能生效
+try:
+    multiprocessing.set_start_method('spawn', force=True)
+except RuntimeError:
+    pass  # 已经设置过了
 
 
 def get_gpu_info() -> Dict[str, Any]:
@@ -246,7 +254,6 @@ class ExperimentRunner:
         gpu_count = max(1, self.gpu_info["count"])
         
         # 正确的GPU分配策略：确保实验均匀分布到每块GPU
-        # 例如：4块GPU，16个并发进程，实验0->GPU0, 实验1->GPU1, 实验2->GPU2, 实验3->GPU3, 实验4->GPU0...
         for i, exp in enumerate(experiments):
             exp['gpu_id'] = i % gpu_count
         
@@ -257,19 +264,24 @@ class ExperimentRunner:
             gpu_allocation[gid] = gpu_allocation.get(gid, 0) + 1
         self.log(f"GPU分配情况: {dict(sorted(gpu_allocation.items()))}")
         
-        # 转换为字符串，避免 ProcessPoolExecutor 序列化问题
+        # 转换为字符串，避免序列化问题
         logs_dir_str = str(self.logs_dir)
         
-        with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
+        # 关键：使用 spawn context 创建进程池，确保子进程不继承父进程的CUDA状态
+        # 这样每个子进程会重新初始化CUDA，CUDA_VISIBLE_DEVICES 才能正确生效
+        mp_context = multiprocessing.get_context('spawn')
+        
+        with ProcessPoolExecutor(max_workers=self.num_workers, mp_context=mp_context) as executor:
             future_to_exp = {}
             for exp in experiments:
-                # 将 gpu_id 直接传递给 run_func，确保子进程使用正确的GPU
+                # 提交任务时打印启动信息
+                self.log(f"[启动] {exp['name']} -> GPU {exp['gpu_id']}")
                 future = executor.submit(
                     run_func,
                     exp['cmd'],
                     exp['name'],
-                    exp['gpu_id'],  # 使用预分配的 gpu_id
-                    logs_dir_str,   # 使用字符串路径
+                    exp['gpu_id'],
+                    logs_dir_str,
                 )
                 future_to_exp[future] = exp
             
@@ -284,7 +296,7 @@ class ExperimentRunner:
                 try:
                     result = future.result()
                 except Exception as e:
-                    result = {"name": exp['name'], "success": False, "error": str(e)}
+                    result = {"name": exp['name'], "success": False, "error": str(e), "gpu_id": exp['gpu_id']}
                 
                 result.update(exp.get('info', {}))
                 all_results.append(result)
@@ -296,17 +308,17 @@ class ExperimentRunner:
                 status = '✓' if result.get('success') else '✗'
                 acc = result.get('accuracy', 0)
                 acc_str = f"{acc:.4f}" if isinstance(acc, float) and acc > 0 else "N/A"
+                gpu_id = result.get('gpu_id', exp.get('gpu_id', '?'))
                 
                 # 更新进度条描述
-                pbar.set_postfix_str(f"{exp['name'][:30]} {status} Acc:{acc_str}")
+                pbar.set_postfix_str(f"GPU{gpu_id} {status} Acc:{acc_str}")
                 pbar.update(1)
                 
-                # 详细日志写入文件
+                # 详细日志：包含GPU信息
                 progress_msg = (
-                    f"[{completed_count}/{total}] ({100*completed_count/total:.1f}%) "
-                    f"{exp['name']} - {'成功' if result.get('success') else '失败'} - "
-                    f"Acc: {acc_str} - "
-                    f"剩余时间: {remaining_time/60:.1f}分钟"
+                    f"[{completed_count}/{total}] [GPU {gpu_id}] "
+                    f"{exp['name']} - {status} Acc:{acc_str} - "
+                    f"剩余: {remaining_time/60:.1f}min"
                 )
                 self.log(progress_msg)
             
@@ -409,35 +421,40 @@ def run_single_experiment(
     cmd: List[str],
     exp_name: str,
     gpu_id: int,
-    logs_dir: Path,
+    logs_dir: str,
 ) -> Dict:
     """
-    运行单个实验
+    运行单个实验（在独立的子进程中执行）
     
     Args:
         cmd: 命令列表
         exp_name: 实验名称
         gpu_id: 要使用的GPU编号（物理GPU ID，如0, 1, 2, 3, 4）
-        logs_dir: 日志目录
+        logs_dir: 日志目录（字符串）
     
     Returns:
         dict: 实验结果
     """
+    import os
+    import subprocess
+    from pathlib import Path
+    from datetime import datetime
+    
     log_file = Path(logs_dir) / f"{exp_name}.log"
     
     start_time = time.time()
     
-    # 创建干净的环境变量副本
-    env = os.environ.copy()
-    
     # 关键：设置 CUDA_VISIBLE_DEVICES 为指定的物理GPU ID
-    # 必须是字符串类型
+    # 在 spawn 模式下，这是一个全新的进程，环境变量设置会生效
+    env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     
-    # main.py 在 system/flcore/main.py，工作目录应是 system
+    # 实时打印启动信息
+    print(f"[GPU {gpu_id}] 启动: {exp_name}", flush=True)
+    
+    # main.py 在 system/flcore/main.py
     main_py_path = Path(cmd[1]) if len(cmd) > 1 else Path.cwd()
     
-    # 获取 system 目录（绝对路径）
     if main_py_path.is_absolute():
         system_dir = main_py_path.parent.parent.resolve()
         relative_main_py = "flcore/main.py"
@@ -448,12 +465,8 @@ def run_single_experiment(
     
     env["PYTHONPATH"] = str(system_dir)
     
-    # 修正命令中的脚本路径为相对于工作目录的路径
     fixed_cmd = cmd.copy()
     fixed_cmd[1] = relative_main_py
-    
-    # 调试：打印GPU分配信息
-    print(f"[DEBUG] {exp_name}: 分配GPU={gpu_id}, CUDA_VISIBLE_DEVICES={env['CUDA_VISIBLE_DEVICES']}")
     
     try:
         result = subprocess.run(
@@ -463,8 +476,8 @@ def run_single_experiment(
         
         with open(log_file, 'w', encoding='utf-8') as f:
             f.write(f"实验: {exp_name}\n")
-            f.write(f"物理GPU ID: {gpu_id}\n")
-            f.write(f"CUDA_VISIBLE_DEVICES: {env['CUDA_VISIBLE_DEVICES']}\n")
+            f.write(f"GPU ID: {gpu_id}\n")
+            f.write(f"CUDA_VISIBLE_DEVICES: {gpu_id}\n")
             f.write(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"命令: {' '.join(fixed_cmd)}\n")
             f.write(f"工作目录: {system_dir}\n\n")

@@ -3,14 +3,27 @@
 """
 GPU 并发测试脚本
 用于验证多GPU并发是否正常工作
+
+使用方法:
+    python test_gpu_parallel.py
+
+同时在另一个终端运行:
+    watch -n 1 nvidia-smi
 """
 
 import os
 import sys
 import time
 import subprocess
+import multiprocessing
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# 关键：使用 spawn 模式，确保子进程不继承 CUDA 上下文
+try:
+    multiprocessing.set_start_method('spawn', force=True)
+except RuntimeError:
+    pass
 
 # 添加路径
 sys.path.insert(0, str(Path(__file__).parent.absolute()))
@@ -44,7 +57,7 @@ time.sleep(10)
 print(f"Test {test_id}: Done!")
 '''
     
-    print(f"[主进程] 启动测试 {test_id}, 分配到 GPU {gpu_id}")
+    print(f"[主进程] 启动测试 {test_id} -> GPU {gpu_id}", flush=True)
     
     try:
         result = subprocess.run(
@@ -102,11 +115,12 @@ def main():
     
     print(f"\n测试分配: {[(t['test_id'], t['gpu_id']) for t in tests]}")
     
-    # 并发执行
+    # 并发执行 - 使用 spawn context
     start_time = time.time()
     results = []
     
-    with ProcessPoolExecutor(max_workers=total_tests) as executor:
+    mp_context = multiprocessing.get_context('spawn')
+    with ProcessPoolExecutor(max_workers=total_tests, mp_context=mp_context) as executor:
         futures = {
             executor.submit(run_gpu_test, t["gpu_id"], t["test_id"]): t
             for t in tests
@@ -118,9 +132,9 @@ def main():
                 result = future.result()
                 results.append(result)
                 status = "✓" if result["success"] else "✗"
-                print(f"[完成] 测试 {result['test_id']} (GPU {result['gpu_id']}): {status}")
+                print(f"[完成] 测试 {result['test_id']} (GPU {result['gpu_id']}): {status}", flush=True)
             except Exception as e:
-                print(f"[错误] 测试 {test['test_id']}: {e}")
+                print(f"[错误] 测试 {test['test_id']}: {e}", flush=True)
     
     elapsed = time.time() - start_time
     

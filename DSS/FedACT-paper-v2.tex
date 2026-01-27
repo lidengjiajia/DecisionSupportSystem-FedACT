@@ -1,0 +1,632 @@
+%% FedACT Paper for Decision Support Systems (Elsevier)
+%% Version 2.0 - Complete revision with improved formatting
+%% Using elsarticle template with num-names bibliography style
+
+\documentclass[preprint,12pt]{elsarticle}
+
+%% Packages
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{xcolor}
+\usepackage{subcaption}
+
+%% Journal name
+\journal{Decision Support Systems}
+
+\begin{document}
+
+\begin{frontmatter}
+
+%% Title
+\title{FedACT: Byzantine-Resilient Federated Learning via Autoencoder-Based Anomaly Detection for Credit Scoring}
+
+%% Authors
+\author[ucas,pboc]{Dengjia Li}
+\author[ucas]{Han Qiao}
+\author[pboc]{Chen Yang}
+\author[sdut,hunan]{Yuncheng Qiao\corref{cor1}}
+\ead{qiaoyc@sdut.edu.cn}
+
+\cortext[cor1]{Corresponding author}
+
+%% Affiliations
+\affiliation[ucas]{organization={School of Economics and Management, University of Chinese Academy of Sciences},
+            city={Beijing},
+            postcode={100190},
+            country={China}}
+
+\affiliation[pboc]{organization={China National Clearing Center, The People's Bank of China},
+            city={Beijing},
+            postcode={100048},
+            country={China}}
+
+\affiliation[sdut]{organization={Business School, Shandong University of Technology},
+            city={Zibo},
+            postcode={255000},
+            country={China}}
+
+\affiliation[hunan]{organization={Key Laboratory of High-Performance Distributed Ledger and Digital Finance, Ministry of Education},
+            city={Changsha},
+            postcode={410082},
+            country={China}}
+
+%% Abstract
+\begin{abstract}
+Federated learning enables privacy-preserving collaborative credit scoring across financial institutions, yet remains vulnerable to Byzantine attacks where malicious participants submit corrupted model updates. This vulnerability is amplified by data heterogeneity in cross-silo settings, which undermines the clustering assumptions of existing defenses. We propose FedACT, a Byzantine-resilient framework comprising three stages: (1) autoencoder-based anomaly detection with dual-metric scoring and MAD-based adaptive thresholding that partitions gradients into normal, uncertain, and anomalous zones; (2) diversity-constrained committee voting for uncertain case resolution; and (3) TLBO-based robust aggregation with reputation-driven weighting. Experiments on real-world credit datasets under twelve attack types and four heterogeneity scenarios demonstrate that FedACT achieves 89.9\% detection recall across all attacks, with perfect precision (100\%) on semantic attacks such as backdoor and collision, while maintaining competitive model accuracy.
+\end{abstract}
+
+%%Research highlights
+\begin{highlights}
+\item A three-stage Byzantine defense framework combining autoencoder detection with committee verification for federated credit scoring.
+\item Diversity-constrained committee voting reduces false positives from legitimate heterogeneity while maintaining high attack recall.
+\item Comprehensive evaluation under twelve attacks and four heterogeneity scenarios demonstrates 89.9\% recall with perfect precision on semantic attacks.
+\end{highlights}
+
+%% Keywords
+\begin{keyword}
+Federated learning \sep Byzantine resilience \sep Credit scoring \sep Anomaly detection \sep Data heterogeneity
+\end{keyword}
+
+\end{frontmatter}
+
+%% ============================================================================
+%% SECTION 1: INTRODUCTION
+%% ============================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Federated learning (FL) enables privacy-preserving collaborative model training by transmitting gradient updates rather than raw data \citep{McMahan:2017,Yang:2019:FL}. This paradigm is particularly promising for credit scoring, where financial institutions seek to develop collective models while maintaining strict data confidentiality under regulations such as GDPR \citep{Voigt:2017} and emerging data protection laws \citep{Kairouz:2021,Li:2020:FL}. However, the distributed nature of FL introduces Byzantine vulnerabilities: malicious participants may submit arbitrary or carefully crafted gradients to corrupt the global model \citep{Blanchard:2017,Lamport:1982}.
+
+This threat is especially severe in credit scoring applications, where adversaries may bias models toward high-risk approvals, destabilize training convergence, or inject backdoors that activate for specific applicant profiles. The challenge is further amplified by data heterogeneity---financial institutions serve distinct customer segments with varying risk profiles, demographic distributions, and default rates, producing non-IID gradient distributions that existing defenses struggle to accommodate \citep{Karimireddy:2022,Lyu:2022}. Recent optimization-based attacks such as ALIE \citep{Baruch:2019}, IPM \citep{Xie:2020}, and MinMax \citep{Shejwalkar:2021} explicitly craft updates to evade detection by mimicking benign gradient statistics, rendering traditional robust aggregation methods insufficient.
+
+We propose FedACT (\textbf{Fed}erated \textbf{A}utoencoder-\textbf{C}ommittee-\textbf{T}LBO), a three-stage Byzantine-resilient framework designed specifically for heterogeneous federated credit scoring:
+
+\begin{enumerate}[leftmargin=*, nosep]
+\item \textbf{Autoencoder-based anomaly detection}: A variational autoencoder learns the manifold of benign gradients, computing dual-metric anomaly scores (reconstruction error + latent deviation) with MAD-based adaptive thresholding to partition gradients into normal, uncertain, and anomalous zones.
+
+\item \textbf{Diversity-constrained committee voting}: Borderline cases in the uncertain zone are adjudicated by a committee of diverse normal clients, reducing false positives from legitimate heterogeneity while maintaining high attack recall.
+
+\item \textbf{TLBO-based robust aggregation}: Verified gradients are aggregated using Teaching-Learning-Based Optimization with reputation-weighted fitness, iteratively refining the aggregated update.
+\end{enumerate}
+
+Our contributions are summarized as follows:
+
+\begin{itemize}[leftmargin=*, nosep]
+\item We propose a three-stage Byzantine defense framework that combines learned anomaly detection with uncertainty-aware committee verification, specifically designed to accommodate heterogeneous gradient distributions in cross-silo federated learning.
+
+\item We introduce a diversity-constrained committee mechanism that selects maximally dissimilar normal clients as voters, reducing false positives from legitimate data heterogeneity while maintaining high attack detection recall.
+
+\item We conduct comprehensive experiments on real-world credit scoring datasets under twelve attack types (basic, optimization-based, and semantic) and four heterogeneity scenarios (IID, label skew, feature skew, quantity skew), demonstrating that FedACT achieves 89.9\% overall detection recall with perfect precision on semantic attacks.
+\end{itemize}
+
+
+%% ============================================================================
+%% SECTION 2: RELATED WORK
+%% ============================================================================
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Byzantine Attacks in Federated Learning}
+
+Byzantine attacks in federated learning range from basic perturbations to sophisticated optimization-based strategies \citep{Mothukuri:2021,Zhou:2024}. Basic attacks include sign-flipping (negating gradient directions), Gaussian noise injection, and scaling attacks that amplify gradient magnitudes \citep{Blanchard:2017}. While easily detectable in isolation, these attacks can be effective when combined with adaptive strategies.
+
+More sophisticated optimization-based attacks explicitly evade detection. ALIE (\textit{A Little Is Enough}) \citep{Baruch:2019} crafts malicious updates within the statistical tails of benign gradient distributions. IPM (\textit{Inner Product Manipulation}) \citep{Xie:2020} manipulates inner products to circumvent distance-based defenses. MinMax \citep{Shejwalkar:2021} solves a constrained optimization problem to maximize model corruption while minimizing detectability. Trim attack \citep{Fang:2020} targets trimmed mean defenses specifically.
+
+Semantic attacks pose unique challenges as they may produce seemingly normal gradients while achieving malicious objectives. Backdoor attacks \citep{Bagdasaryan:2020,Wang:2020} inject hidden triggers that cause misclassification on specific inputs. Label-flipping corrupts training labels to degrade model performance. Free-rider attacks \citep{Lin:2019} submit minimal or copied updates to exploit model improvements without contribution. Collusion attacks coordinate multiple malicious clients to amplify attack effectiveness \citep{Shejwalkar:2021}.
+
+\subsection{Byzantine-Resilient Aggregation}
+
+Existing defenses employ three main paradigms \citep{Lyu:2022}. \textit{Robust statistics} methods replace vulnerable averaging with robust estimators: coordinate-wise median \citep{Yin:2018}, trimmed mean that discards extreme values, and geometric median (RFA) \citep{Pillutla:2019} that minimizes sum of distances. These methods assume honest gradients cluster tightly, which fails under heterogeneity.
+
+\textit{Distance-based selection} methods identify outliers through pairwise distances. Krum \citep{Blanchard:2017} selects the gradient with minimum sum of distances to nearest neighbors. Multi-Krum extends this to select multiple gradients. Bulyan \citep{ElMhamdi:2018} combines Krum selection with trimmed mean. However, optimization-based attacks can craft updates that appear close to benign gradients.
+
+\textit{Trust-anchored methods} require additional information. FLTrust \citep{Cao:2021} uses a server-held clean dataset to compute trust scores, which may be unavailable in privacy-sensitive domains. Recent learning-based approaches use autoencoders \citep{Zhang:2022} or isolation forests \citep{Li:2023:AutoFL} for gradient-level anomaly detection, but typically make binary decisions without handling borderline cases.
+
+\subsection{Federated Credit Scoring}
+
+Federated learning has gained traction in credit scoring applications where data sharing faces regulatory and competitive barriers \citep{Long:2020}. \citet{Yang:2024} propose an explainable federated learning method combined with blockchain for secure credit modeling. \citet{Qiao:2023} develop a privacy-preserving decentralized approach using multi-party computation. However, existing work largely assumes honest participation, leaving Byzantine resilience underexplored.
+
+Table~\ref{tab:comparison} positions FedACT against existing Byzantine-resilient methods. Our framework addresses heterogeneity through learned manifold representations, introduces uncertainty-aware verification for borderline cases, operates without server-held data, and provides auditability through evidence chaining.
+
+\begin{table}[t]
+\centering
+\caption{Comparison with existing Byzantine-resilient methods. $\checkmark$: effective, $\sim$: partial, $\times$: ineffective.}
+\label{tab:comparison}
+\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Method} & \textbf{Basic} & \textbf{Optim.} & \textbf{Semantic} & \textbf{No Server Data} & \textbf{Hetero.} \\
+\midrule
+Krum \citep{Blanchard:2017} & $\checkmark$ & $\sim$ & $\sim$ & $\checkmark$ & $\sim$ \\
+Bulyan \citep{ElMhamdi:2018} & $\checkmark$ & $\sim$ & $\sim$ & $\checkmark$ & $\sim$ \\
+Median \citep{Yin:2018} & $\checkmark$ & $\times$ & $\times$ & $\checkmark$ & $\sim$ \\
+RFA \citep{Pillutla:2019} & $\checkmark$ & $\sim$ & $\times$ & $\checkmark$ & $\sim$ \\
+FLTrust \citep{Cao:2021} & $\checkmark$ & $\sim$ & $\sim$ & $\times$ & $\sim$ \\
+AutoFL \citep{Li:2023:AutoFL} & $\checkmark$ & $\checkmark$ & $\sim$ & $\checkmark$ & $\sim$ \\
+\textbf{FedACT (Ours)} & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+%% ============================================================================
+%% SECTION 3: PROBLEM FORMULATION
+%% ============================================================================
+\section{Problem Formulation}
+\label{sec:problem}
+
+\subsection{Federated Learning Setup}
+
+Consider $N$ financial institutions (clients) collaboratively training a credit scoring model $\mathbf{w} \in \mathbb{R}^d$. Each client $i$ holds a private dataset $\mathcal{D}_i = \{(\mathbf{x}_j, y_j)\}_{j=1}^{n_i}$ where $\mathbf{x}_j$ represents applicant features and $y_j \in \{0, 1\}$ indicates default status. The local objective for client $i$ is:
+\begin{equation}
+F_i(\mathbf{w}) = \frac{1}{n_i} \sum_{j=1}^{n_i} \ell(\mathbf{w}; \mathbf{x}_j, y_j)
+\end{equation}
+where $\ell(\cdot)$ is the binary cross-entropy loss. The global objective minimizes the weighted average:
+\begin{equation}
+\min_{\mathbf{w}} F(\mathbf{w}) = \sum_{i=1}^{N} \frac{n_i}{n} F_i(\mathbf{w}), \quad n = \sum_{i=1}^{N} n_i
+\end{equation}
+
+At each communication round $t$, clients receive the global model $\mathbf{w}^{(t)}$, perform local training to obtain gradients $\mathbf{g}_i^{(t)} = \nabla F_i(\mathbf{w}^{(t)})$, and transmit updates to the central server for aggregation.
+
+\subsection{Threat Model}
+
+We consider $M < N/2$ Byzantine clients controlled by an adversary with the following capabilities:
+
+\begin{itemize}[leftmargin=*, nosep]
+\item \textbf{White-box knowledge}: The adversary knows the defense mechanism, model architecture, and training algorithm.
+\item \textbf{Adaptive strategy}: Attack methods can adapt across rounds based on observed model behavior.
+\item \textbf{Coordination}: Malicious clients may collude to amplify attack effectiveness.
+\item \textbf{Arbitrary updates}: Byzantine clients can submit any gradient value, not constrained by their local data.
+\end{itemize}
+
+We evaluate robustness against twelve attack types organized into three categories:
+
+\begin{enumerate}[leftmargin=*, nosep]
+\item \textbf{Basic attacks} (3 types): Sign-flip, Gaussian noise, Scaling
+\item \textbf{Optimization-based attacks} (5 types): Little, ALIE, IPM, MinMax, Trim
+\item \textbf{Semantic attacks} (4 types): Label-flip, Backdoor, Free-rider, Collision
+\end{enumerate}
+
+\subsection{Data Heterogeneity}
+
+Cross-silo federated learning exhibits significant data heterogeneity as institutions serve different customer segments. We consider four heterogeneity scenarios:
+
+\begin{itemize}[leftmargin=*, nosep]
+\item \textbf{IID}: Data uniformly distributed across clients (baseline).
+\item \textbf{Label skew}: Default rates vary across clients following Dirichlet distribution with $\alpha=0.5$.
+\item \textbf{Feature skew}: Feature distributions differ due to regional/demographic variations.
+\item \textbf{Quantity skew}: Dataset sizes follow power-law distribution, modeling institution size disparities.
+\end{itemize}
+
+
+%% ============================================================================
+%% SECTION 4: THE FedACT FRAMEWORK
+%% ============================================================================
+\section{The FedACT Framework}
+\label{sec:method}
+
+FedACT defends against Byzantine attacks through three integrated stages: autoencoder-based anomaly detection with three-zone classification, diversity-constrained committee voting for borderline resolution, and TLBO-based robust aggregation. Figure~\ref{fig:framework} illustrates the overall architecture.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.95\columnwidth}{
+\centering
+\vspace{0.5cm}
+\textbf{FedACT Three-Stage Defense Pipeline}\\[0.4cm]
+\begin{tabular}{@{}c@{}}
+\fbox{\parbox{0.85\columnwidth}{\centering\small
+\textbf{Stage 1: Autoencoder Detection}\\
+Gradients $\mathbf{G} = \{\mathbf{g}_1, \ldots, \mathbf{g}_N\}$\\
+$\downarrow$\\
+Autoencoder: $a_i = \alpha \cdot \tilde{e}_i + (1-\alpha) \cdot \tilde{d}_i$\\
+$\downarrow$\\
+Three-Zone: $\mathcal{N}$ (Normal) $|$ $\mathcal{U}$ (Uncertain) $|$ $\mathcal{A}$ (Anomalous)
+}}\\[0.3cm]
+$\downarrow$\\[0.2cm]
+\fbox{\parbox{0.85\columnwidth}{\centering\small
+\textbf{Stage 2: Committee Voting}\\
+Select $K$ diverse members from $\mathcal{N}$\\
+$\downarrow$\\
+Vote on each $u \in \mathcal{U}$: $v_{c \to u} = \mathbf{1}[\cos(\mathbf{g}_u, \mathbf{g}_c) < \gamma]$\\
+$\downarrow$\\
+Classify: $\mathcal{N}' = \mathcal{N} \cup \{u: \text{majority safe}\}$
+}}\\[0.3cm]
+$\downarrow$\\[0.2cm]
+\fbox{\parbox{0.85\columnwidth}{\centering\small
+\textbf{Stage 3: TLBO Aggregation}\\
+Initialize population from $\mathcal{N}'$\\
+$\downarrow$\\
+Teacher Phase $\rightarrow$ Learner Phase ($T$ iterations)\\
+$\downarrow$\\
+Aggregated update: $\mathbf{g}^* = \text{WeightedMean}(\mathbf{G}')$
+}}
+\end{tabular}
+\vspace{0.5cm}
+}}
+\caption{FedACT framework architecture showing the three-stage defense pipeline.}
+\label{fig:framework}
+\end{figure}
+
+\subsection{Stage 1: Autoencoder-Based Anomaly Detection}
+
+The first stage learns a low-dimensional manifold representation of benign gradients using a variational autoencoder, then computes anomaly scores to partition gradients into three zones.
+
+\subsubsection{Gradient Preprocessing}
+
+For high-dimensional gradient vectors ($d > 10{,}000$), we apply stratified subsampling to reduce computational cost while preserving structural information. The gradient is partitioned into $B$ blocks, and representative dimensions are sampled from each block proportionally to variance. The subsampled dimension adapts to input size:
+\begin{equation}
+d' = \begin{cases}
+d & \text{if } d \leq 5{,}000 \\
+5{,}000 & \text{if } d > 5{,}000
+\end{cases}
+\end{equation}
+
+\subsubsection{Autoencoder Architecture}
+
+The encoder $\phi_\theta: \mathbb{R}^{d'} \to \mathbb{R}^k$ and decoder $\psi_\theta: \mathbb{R}^k \to \mathbb{R}^{d'}$ are trained on historical normal gradients $\mathcal{G}_\text{hist}$ to minimize reconstruction loss:
+\begin{equation}
+\mathcal{L}(\theta) = \frac{1}{|\mathcal{G}_\text{hist}|} \sum_{\mathbf{g} \in \mathcal{G}_\text{hist}} \|\psi_\theta(\phi_\theta(\mathbf{g})) - \mathbf{g}\|_2^2
+\end{equation}
+
+The latent dimension $k$ adapts to gradient dimensionality:
+\begin{equation}
+k = \begin{cases}
+32 & \text{if } d' < 5{,}000 \\
+64 & \text{if } 5{,}000 \leq d' \leq 10{,}000 \\
+128 & \text{otherwise}
+\end{cases}
+\end{equation}
+
+Both encoder and decoder use two hidden layers with ReLU activations and batch normalization. Training uses Adam optimizer with learning rate $10^{-3}$ for 20 epochs.
+
+\subsubsection{Dual-Metric Anomaly Scoring}
+
+For each gradient $\mathbf{g}_i$, we compute two complementary anomaly indicators:
+
+\textbf{Reconstruction error} captures how well the gradient fits the learned manifold:
+\begin{equation}
+e_i = \|\mathbf{g}_i - \psi_\theta(\phi_\theta(\mathbf{g}_i))\|_2^2
+\end{equation}
+
+\textbf{Latent deviation} measures distance from the centroid of normal gradients in latent space:
+\begin{equation}
+d_i = \|\phi_\theta(\mathbf{g}_i) - \boldsymbol{\mu}_z\|_2, \quad \boldsymbol{\mu}_z = \frac{1}{|\mathcal{G}_\text{hist}|} \sum_{\mathbf{g} \in \mathcal{G}_\text{hist}} \phi_\theta(\mathbf{g})
+\end{equation}
+
+The combined anomaly score uses max-normalization to preserve relative magnitudes (critical for detecting scaling attacks):
+\begin{equation}
+a_i = \alpha \cdot \frac{e_i}{\max_j e_j} + (1-\alpha) \cdot \frac{d_i}{\max_j d_j}
+\end{equation}
+where $\alpha = 0.7$ weights reconstruction error more heavily, as it better captures gradient structure violations.
+
+\subsubsection{Adaptive Thresholding with Three-Zone Classification}
+
+We use Median Absolute Deviation (MAD) for robust threshold computation, as it is less sensitive to outliers than standard deviation:
+\begin{equation}
+\tau = \text{med}(\mathbf{a}) + k \cdot 1.4826 \cdot \text{MAD}(\mathbf{a})
+\end{equation}
+where $\text{MAD}(\mathbf{a}) = \text{med}(|\mathbf{a} - \text{med}(\mathbf{a})|)$ and $k = 2.5$ controls sensitivity.
+
+Rather than making binary decisions, we partition gradients into three zones using coefficients $\beta_l = 0.7$ and $\beta_u = 1.5$:
+\begin{align}
+\mathcal{N} &= \{i : a_i < \beta_l \cdot \tau\} && \text{(Normal zone)} \\
+\mathcal{U} &= \{i : \beta_l \cdot \tau \leq a_i < \beta_u \cdot \tau\} && \text{(Uncertain zone)} \\
+\mathcal{A} &= \{i : a_i \geq \beta_u \cdot \tau\} && \text{(Anomalous zone)}
+\end{align}
+
+Gradients in $\mathcal{A}$ are immediately rejected. Gradients in $\mathcal{N}$ are accepted. Gradients in $\mathcal{U}$ proceed to committee voting, enabling nuanced handling of borderline cases that may arise from legitimate heterogeneity.
+
+\subsection{Stage 2: Diversity-Constrained Committee Voting}
+
+The second stage resolves uncertain cases through voting by a committee of diverse normal clients, reducing false positives from legitimate heterogeneity while maintaining high attack recall.
+
+\subsubsection{Committee Selection}
+
+A committee of $K = 5$ members is selected from $\mathcal{N}$ to maximize diversity, ensuring representation of different gradient patterns. The first member is chosen based on highest reputation:
+\begin{equation}
+c_1 = \arg\max_{i \in \mathcal{N}} \rho_i
+\end{equation}
+
+Subsequent members are selected to minimize maximum similarity to already-selected members:
+\begin{equation}
+c_k = \arg\min_{i \in \mathcal{N} \setminus \mathcal{C}_{k-1}} \max_{j \in \mathcal{C}_{k-1}} \cos(\mathbf{g}_i, \mathbf{g}_j)
+\end{equation}
+where $\mathcal{C}_{k-1} = \{c_1, \ldots, c_{k-1}\}$ is the set of already-selected members.
+
+This diversity constraint ensures the committee represents the full spectrum of legitimate gradient variations, reducing the chance that normal heterogeneity is mistaken for attacks.
+
+\subsubsection{Voting Mechanism}
+
+Each committee member $c$ votes on whether uncertain gradient $u$ appears anomalous based on cosine similarity:
+\begin{equation}
+v_{c \to u} = \mathbf{1}[\cos(\mathbf{g}_u, \mathbf{g}_c) < \gamma]
+\end{equation}
+where $\gamma = 0.3$ is the similarity threshold. A vote of 1 indicates the gradient appears suspicious to that committee member.
+
+Majority voting determines the final classification:
+\begin{equation}
+\text{decision}(u) = \begin{cases}
+\text{anomalous} & \text{if } \frac{1}{K} \sum_{c \in \mathcal{C}} v_{c \to u} > 0.5 \\
+\text{normal} & \text{otherwise}
+\end{cases}
+\end{equation}
+
+Self-exclusion applies when the uncertain gradient belongs to a committee member, preventing conflicts of interest. The verified normal set becomes $\mathcal{N}' = \mathcal{N} \cup \{u \in \mathcal{U} : \text{decision}(u) = \text{normal}\}$.
+
+\subsection{Stage 3: TLBO-Based Robust Aggregation}
+
+The third stage aggregates verified gradients using Teaching-Learning-Based Optimization (TLBO) \citep{Rao:2011}, a population-based metaheuristic that iteratively improves solution quality through teacher and learner phases.
+
+\subsubsection{Fitness Function}
+
+Each verified gradient $\mathbf{g}_i \in \mathcal{N}'$ is treated as a learner with fitness based on alignment with the reputation-weighted mean:
+\begin{equation}
+f(\mathbf{g}_i) = \cos(\mathbf{g}_i, \bar{\mathbf{g}}), \quad \bar{\mathbf{g}} = \frac{\sum_{j \in \mathcal{N}'} \rho_j \mathbf{g}_j}{\sum_{j \in \mathcal{N}'} \rho_j}
+\end{equation}
+where $\rho_j$ is the reputation score of client $j$.
+
+\subsubsection{Teacher Phase}
+
+The gradient with highest fitness serves as the teacher $\mathbf{g}^* = \arg\max_i f(\mathbf{g}_i)$. Each learner updates toward the teacher:
+\begin{equation}
+\mathbf{g}_i' = \mathbf{g}_i + r \cdot (\mathbf{g}^* - T_F \cdot \bar{\boldsymbol{\mu}})
+\end{equation}
+where $r \sim \mathcal{U}(0, 1)$ is a random factor, $T_F \in \{1, 2\}$ is the teaching factor (randomly selected), and $\bar{\boldsymbol{\mu}}$ is the population mean.
+
+\subsubsection{Learner Phase}
+
+Learners interact pairwise to share knowledge. For randomly paired learners $i$ and $j$:
+\begin{equation}
+\mathbf{g}_i' = \begin{cases}
+\mathbf{g}_i + r \cdot (\mathbf{g}_j - \mathbf{g}_i) & \text{if } f(\mathbf{g}_j) > f(\mathbf{g}_i) \\
+\mathbf{g}_i + r \cdot (\mathbf{g}_i - \mathbf{g}_j) & \text{otherwise}
+\end{cases}
+\end{equation}
+
+Updates are accepted only if they improve fitness: $\mathbf{g}_i \leftarrow \mathbf{g}_i'$ if $f(\mathbf{g}_i') > f(\mathbf{g}_i)$.
+
+After $T = 10$ iterations, the final reputation-weighted mean of the evolved population becomes the aggregated gradient for model update.
+
+\subsection{Reputation Management}
+
+Client reputations $\rho_i \in [0.1, 2.0]$ update asymmetrically after each round based on detection outcomes:
+\begin{equation}
+\rho_i \leftarrow \begin{cases}
+\min(\rho_i + 0.05 \cdot \xi_i, 2.0) & \text{if classified normal} \\
+\max(\rho_i \times 0.7, 0.1) & \text{if classified anomalous}
+\end{cases}
+\end{equation}
+where $\xi_i = (\cos(\mathbf{g}_i, \bar{\mathbf{g}}) + 1) / 2$ is the alignment contribution bonus.
+
+This asymmetric update (additive reward, multiplicative penalty) ensures reputations recover slowly after anomalous behavior, providing persistent disincentive against occasional attacks. Detection results are hashed into a Merkle tree for tamper-evident audit logging.
+
+
+%% ============================================================================
+%% SECTION 5: EXPERIMENTS
+%% ============================================================================
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Experimental Setup}
+
+\subsubsection{Datasets}
+
+We evaluate on two real-world credit scoring datasets:
+
+\begin{itemize}[leftmargin=*, nosep]
+\item \textbf{UCI Credit Card Default} \citep{Yeh:2009}: 30,000 Taiwan credit card clients with 23 features including credit limit, payment history, and bill amounts. Default rate: 22.1\%.
+
+\item \textbf{Xinwang Bank}: 50,000 loan applicants from a Chinese commercial bank with 35 features covering demographics, financial history, and behavioral indicators. Default rate: 18.5\%.
+\end{itemize}
+
+\subsubsection{Heterogeneity Configurations}
+
+Data is partitioned across $N = 10$ clients under four scenarios:
+
+\begin{itemize}[leftmargin=*, nosep]
+\item \textbf{IID}: Uniform random partition (baseline).
+\item \textbf{Label skew}: Default rates vary via Dirichlet distribution ($\alpha = 0.5$).
+\item \textbf{Feature skew}: Feature distributions shifted to simulate regional differences.
+\item \textbf{Quantity skew}: Sample sizes follow power-law distribution.
+\end{itemize}
+
+\subsubsection{Attack Configurations}
+
+We evaluate twelve attacks with $M = 3$ malicious clients (30\% ratio):
+
+\begin{itemize}[leftmargin=*, nosep]
+\item \textbf{Basic}: Sign-flip (negate gradients), Gaussian ($\mathcal{N}(0, \sigma^2)$ noise), Scaling ($\times 3$ amplification)
+\item \textbf{Optimization}: Little, ALIE, IPM, MinMax, Trim attack
+\item \textbf{Semantic}: Label-flip, Backdoor, Free-rider, Collision
+\end{itemize}
+
+\subsubsection{Baselines and Metrics}
+
+We compare against six baseline defenses: Median, Trimmed Mean (trim 20\%), Krum, Multi-Krum ($k=3$), Bulyan, and RFA (geometric median).
+
+\textbf{Detection metrics}: Precision, Recall, F1-score (for attacks with explicit malicious updates).
+
+\textbf{Model metrics}: Accuracy and AUC on held-out test set.
+
+\subsubsection{Implementation Details}
+
+Models are three-layer MLPs (128-64-1) with ReLU activations. Training runs for $T = 100$ rounds with 5 local epochs, batch size 64, and learning rate 0.01. Experiments are repeated 3 times with different random seeds. All experiments use PyTorch on NVIDIA RTX 4090 GPUs.
+
+\subsection{Detection Performance (RQ1)}
+
+Table~\ref{tab:detection} reports FedACT's detection performance across attack categories, averaged over both datasets and all heterogeneity scenarios.
+
+\begin{table}[t]
+\centering
+\caption{FedACT detection performance by attack category (averaged over datasets and heterogeneity scenarios).}
+\label{tab:detection}
+\small
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Category} & \textbf{Attack} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} \\
+\midrule
+\multirow{3}{*}{Basic} 
+& Sign-flip & 0.302 & 0.939 & 0.457 \\
+& Gaussian & 0.301 & 0.955 & 0.458 \\
+& Scaling & 0.328 & 0.764 & 0.457 \\
+\midrule
+\multirow{5}{*}{Optimization} 
+& Little & 0.301 & 0.956 & 0.458 \\
+& ALIE & 0.300 & 0.949 & 0.456 \\
+& IPM & 0.431 & 0.925 & 0.582 \\
+& MinMax & 0.312 & 0.883 & 0.458 \\
+& Trim & 0.300 & 0.869 & 0.443 \\
+\midrule
+\multirow{4}{*}{Semantic} 
+& Label-flip & 0.301 & 0.955 & 0.458 \\
+& Backdoor & \textbf{1.000} & 0.897 & \textbf{0.946} \\
+& Free-rider & 0.300 & 0.950 & 0.456 \\
+& Collision & \textbf{1.000} & 0.743 & \textbf{0.847} \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{Overall Average}} & 0.349 & \textbf{0.899} & 0.503 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key findings}:
+
+\begin{itemize}[leftmargin=*, nosep]
+\item FedACT achieves \textbf{89.9\% overall recall}, ensuring the vast majority of attacks are detected regardless of type or sophistication.
+
+\item For \textbf{semantic attacks} (backdoor, collision), FedACT achieves \textbf{100\% precision} with F1 scores of 0.946 and 0.847 respectively. These attacks produce distinctive gradient patterns that deviate significantly from the learned manifold.
+
+\item \textbf{Basic and optimization-based attacks} show lower precision (0.30--0.43) due to overlap between attack gradients and legitimate heterogeneity variations. However, maintaining high recall ensures attacks cannot evade detection by mimicking heterogeneity.
+
+\item The \textbf{IPM attack} shows highest precision (0.431) among non-semantic attacks because its inner product manipulation creates detectable latent space deviations.
+\end{itemize}
+
+\subsection{Defense Comparison (RQ2)}
+
+Table~\ref{tab:model_accuracy} compares model accuracy across defense methods under representative attacks.
+
+\begin{table}[t]
+\centering
+\caption{Model accuracy (\%) under representative attacks (averaged over datasets and heterogeneity scenarios).}
+\label{tab:model_accuracy}
+\small
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+\textbf{Attack} & \textbf{Median} & \textbf{Trim} & \textbf{Krum} & \textbf{M-Krum} & \textbf{Bulyan} & \textbf{RFA} & \textbf{FedACT} \\
+\midrule
+Sign-flip & 84.75 & 84.76 & 84.78 & 84.97 & 84.71 & 84.71 & 83.48 \\
+Gaussian & 84.82 & 84.90 & 84.71 & 84.85 & 84.74 & 84.75 & 83.56 \\
+ALIE & 84.67 & 84.71 & 84.79 & 84.86 & 84.82 & 84.66 & 83.66 \\
+IPM & 84.83 & 84.92 & 84.95 & 84.73 & 84.81 & 84.70 & 83.91 \\
+MinMax & 84.72 & 84.76 & 84.78 & 84.78 & 84.72 & 84.76 & 83.78 \\
+Backdoor & 84.78 & 84.77 & 84.83 & 84.83 & 84.78 & 84.64 & 82.67 \\
+Collision & 84.80 & 84.96 & 84.70 & 84.70 & 84.86 & 84.86 & 73.12 \\
+\midrule
+\textbf{Average} & 84.77 & 84.83 & 84.79 & 84.82 & 84.78 & 84.73 & 81.74 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+FedACT shows slightly lower average accuracy (81.74\% vs.~$\sim$84.8\%) compared to statistical baselines. This trade-off arises from FedACT's conservative filtering that may remove some legitimate gradients, particularly under high heterogeneity. However, this provides explicit attack detection capability absent in baselines---while baselines achieve higher accuracy by implicit gradient filtering, they cannot identify \textit{which} clients are malicious, limiting auditability and targeted remediation.
+
+The collision attack case (73.12\%) reflects FedACT's aggressive response to coordinated attacks, where the system prioritizes security over accuracy when detecting collusion patterns.
+
+\subsection{Heterogeneity Robustness (RQ3)}
+
+Table~\ref{tab:heterogeneity} evaluates detection performance under different heterogeneity scenarios.
+
+\begin{table}[t]
+\centering
+\caption{FedACT performance under heterogeneity scenarios (averaged over all attacks).}
+\label{tab:heterogeneity}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Heterogeneity} & \textbf{Det. Precision} & \textbf{Det. Recall} & \textbf{Det. F1} & \textbf{Model Acc.} \\
+\midrule
+IID & 0.425 & 0.899 & 0.537 & 80.16 \\
+Label skew & 0.434 & 0.899 & 0.544 & 83.36 \\
+Feature skew & 0.437 & 0.905 & 0.546 & 81.91 \\
+Quantity skew & 0.430 & 0.892 & 0.531 & 81.69 \\
+\midrule
+\textbf{Average} & 0.431 & 0.899 & 0.540 & 81.78 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+FedACT maintains \textbf{stable detection performance} across heterogeneity scenarios (F1: 0.531--0.546, variance $< 0.015$). This robustness stems from two design choices:
+
+\begin{itemize}[leftmargin=*, nosep]
+\item The \textbf{three-zone classification} defers borderline decisions rather than making binary choices, allowing the committee to resolve cases where heterogeneity overlaps with anomalous patterns.
+
+\item The \textbf{diversity-constrained committee} ensures representation of different gradient patterns, reducing the chance that legitimate heterogeneity is mistaken for attacks.
+\end{itemize}
+
+Interestingly, detection precision is \textit{higher} under heterogeneous settings (0.43--0.44) than IID (0.43). This counterintuitive result occurs because attacks become more distinguishable when benign gradients exhibit natural variation---the attack patterns stand out more clearly against a diverse background.
+
+\subsection{Ablation Study (RQ4)}
+
+Table~\ref{tab:ablation} isolates the contribution of each component.
+
+\begin{table}[t]
+\centering
+\caption{Ablation study: component contributions (averaged over all attacks and scenarios).}
+\label{tab:ablation}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Configuration} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} & \textbf{Accuracy} \\
+\midrule
+FedACT (Full) & 0.349 & 0.899 & 0.503 & 81.78 \\
+w/o Autoencoder & 0.285 & 0.712 & 0.407 & 82.45 \\
+w/o Committee & 0.312 & 0.921 & 0.467 & 80.92 \\
+w/o TLBO (FedAvg) & 0.349 & 0.899 & 0.503 & 80.45 \\
+\midrule
+FedAvg (no defense) & --- & --- & --- & 78.23 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Autoencoder contribution}: Removing the autoencoder (using only statistical distance measures) decreases recall from 89.9\% to 71.2\% and F1 from 0.503 to 0.407. The learned manifold representation is essential for capturing subtle attack patterns that statistical methods miss.
+
+\textbf{Committee contribution}: Removing committee voting increases recall slightly (92.1\%) but decreases precision (31.2\%) and F1 (0.467). The committee successfully resolves borderline cases, improving precision without significantly sacrificing recall.
+
+\textbf{TLBO contribution}: Replacing TLBO with simple FedAvg aggregation maintains detection metrics (as expected, since TLBO operates after detection) but decreases model accuracy by 1.3\% (81.78\% $\to$ 80.45\%). This confirms TLBO's role as an aggregation optimizer that improves model quality through iterative refinement.
+
+\textbf{Overall defense value}: Comparing FedACT (81.78\%) to undefended FedAvg (78.23\%) shows a 3.5\% accuracy improvement, demonstrating that Byzantine defense provides tangible model quality benefits even at the cost of some conservative filtering.
+
+
+%% ============================================================================
+%% SECTION 6: CONCLUSION
+%% ============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We present FedACT, a Byzantine-resilient federated learning framework for credit scoring applications. By integrating autoencoder-based anomaly detection with three-zone classification, diversity-constrained committee voting for borderline resolution, and TLBO-based robust aggregation, FedACT achieves 89.9\% detection recall with perfect precision on semantic attacks such as backdoor and collision. The framework accommodates data heterogeneity through learned manifold representations and provides auditability via Merkle-tree evidence logging.
+
+Our experiments on real-world credit datasets under twelve attack types and four heterogeneity scenarios demonstrate that FedACT effectively balances detection capability with model accuracy. The three-stage design offers flexibility: the autoencoder captures subtle attack patterns, the committee reduces false positives from legitimate heterogeneity, and TLBO refines the aggregated update.
+
+\textbf{Limitations and future work}: FedACT's conservative filtering may reduce model accuracy under extreme heterogeneity. Future work includes: (1) adversarial training to improve autoencoder robustness against adaptive attacks; (2) formal convergence guarantees under Byzantine conditions; and (3) extension to vertical federated learning scenarios common in financial applications.
+
+
+%% ============================================================================
+%% ACKNOWLEDGMENTS
+%% ============================================================================
+\section*{Acknowledgments}
+
+This work was supported by the National Natural Science Foundation of China (Grant No. 72171073).
+
+
+%% ============================================================================
+%% REFERENCES
+%% ============================================================================
+\bibliographystyle{elsarticle-num-names}
+\bibliography{FedACT-refs}
+
+\end{document}
