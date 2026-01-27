@@ -21,6 +21,7 @@
 """
 
 import copy
+import sys
 import torch
 from torch import nn
 import argparse
@@ -29,6 +30,12 @@ import time
 import warnings
 import numpy as np
 import logging
+
+# 添加 system 目录到 Python 路径，确保模块可以被正确导入
+current_dir = os.path.dirname(os.path.abspath(__file__))
+system_dir = os.path.dirname(current_dir)  # system 目录
+if system_dir not in sys.path:
+    sys.path.insert(0, system_dir)
 
 # 服务器导入
 from flcore.servers.serveravg import FedAvg
