@@ -803,14 +803,16 @@ class GradientDetector(torch.nn.Module):
     
     # ==================== 数据集专用配置（调优后） ====================
     # 
-    # 调优实验结果 (2026-01-24):
-    # - UCI:     4种攻击全部100%检测 (Precision=1.0, Recall=1.0, F1=1.0)
-    # - Xinwang: 4种攻击全部100%检测 (Precision=1.0, Recall=1.0, F1=1.0)
+    # 调优实验结果 (2026-01-27):
+    # - 原 k=2.5 导致高假阳性（Non-IID梯度被误判）
+    # - 调整 k=3.5 平衡检测率和假阳性率
+    # - backdoor/collision 攻击无需特殊处理（本身梯度差异大）
     #
     # 关键改进:
     # 1. 使用 max 归一化代替标准化，保留绝对大小信息
-    # 2. MAD 阈值系数 k=2.5（比 k=3.0 更敏感）
+    # 2. MAD 阈值系数动态调整（基础 k=3.5，降低FP）
     # 3. 统一采样维度 10000，2层隐藏层 [1024, 256]
+    # 4. 添加最小阈值保护，避免阈值过低
     # ======================================================
     
     DATASET_CONFIGS = {
@@ -819,14 +821,14 @@ class GradientDetector(torch.nn.Module):
             'latent_dim': 128,           # 潜在维度
             'hidden_layers': 2,          # 2层隐藏层
             'dropout': 0.15,             # dropout
-            'mad_k': 2.5,                # MAD阈值系数
+            'mad_k': 3.5,                # MAD阈值系数（提高以降低FP）
         },
         'xinwang': {
             'max_input_dim': 10000,      # 调优后: 10K采样 (1.1%保留)
             'latent_dim': 256,           # 更大的潜在维度（模型更复杂）
             'hidden_layers': 2,          # 2层隐藏层
             'dropout': 0.2,              # 稍高的dropout
-            'mad_k': 2.5,                # MAD阈值系数
+            'mad_k': 3.5,                # MAD阈值系数（提高以降低FP）
         },
     }
     
@@ -1079,18 +1081,19 @@ class GradientDetector(torch.nn.Module):
     
     def adaptive_threshold(self, scores: torch.Tensor, k: float = None) -> float:
         """
-        自适应阈值（MAD方法，调优后 k=2.5）
+        自适应阈值（MAD方法，调优后 k=3.5）
         
         使用 MAD (Median Absolute Deviation) 计算鲁棒阈值
         threshold = median + k * 1.4826 * MAD
         
-        调优结果:
-        - k=2.5 比 k=3.0 更敏感，提高召回率
-        - 在 UCI 和 Xinwang 上均达到 100% 检测率
+        调优结果 (2026-01-27):
+        - k=3.5 平衡检测率和假阳性率
+        - 添加最小阈值保护，避免阈值过低导致误报
+        - 异质性场景下正常梯度差异大，需要更宽松的阈值
         
         Args:
             scores: 异常分数张量
-            k: MAD阈值系数（默认从配置获取或使用2.5）
+            k: MAD阈值系数（默认从配置获取或使用3.5）
             
         Returns:
             threshold: 自适应阈值
@@ -1098,17 +1101,22 @@ class GradientDetector(torch.nn.Module):
         median = scores.median()
         mad = (scores - median).abs().median()
         
-        # 使用配置中的k值或默认2.5
+        # 使用配置中的k值或默认3.5
         if k is None:
             if self.dataset_type:
                 config = self.get_dataset_config(self.dataset_type)
-                k = config.get('mad_k', 2.5) if config else 2.5
+                k = config.get('mad_k', 3.5) if config else 3.5
             else:
-                k = 2.5
+                k = 3.5
         
         threshold = median + k * 1.4826 * mad
         
-        return threshold.item()
+        # 最小阈值保护：确保阈值不会太低
+        # 如果 MAD 很小（所有分数相近），使用百分位数作为最小阈值
+        min_threshold = torch.quantile(scores, 0.75).item()  # 使用75%分位数
+        threshold = max(threshold.item(), min_threshold)
+        
+        return threshold
     
     def fit(self, gradients: torch.Tensor, epochs: int = 20, lr: float = 1e-3):
         """
@@ -1244,7 +1252,7 @@ class Committee:
         self,
         target_grad: torch.Tensor,
         member_grads: List[torch.Tensor],
-        threshold: float = 0.3
+        threshold: float = 0.5
     ) -> Tuple[bool, float]:
         """
         委员会投票
@@ -1252,7 +1260,7 @@ class Committee:
         Args:
             target_grad: 待检测的梯度
             member_grads: 委员会成员的梯度列表
-            threshold: 相似度阈值，低于此值视为"不相似"
+            threshold: 相似度阈值，低于此值视为"不相似"（默认0.5，提高以降低FP）
             
         Returns:
             (是否异常, 异常票比例)
@@ -1458,10 +1466,10 @@ class FedACTDefense(BaseDefense):
         committee_size: int = 5,
         tlbo_iterations: int = 10,
         autoencoder_epochs: int = 20,
-        vote_threshold: float = 0.3,
+        vote_threshold: float = 0.5,
         dataset_type: str = None,
-        accumulation_window: int = 3,
-        anomaly_confirm_threshold: int = 2,
+        accumulation_window: int = 5,
+        anomaly_confirm_threshold: int = 3,
         server=None,
         **kwargs
     ):
@@ -1477,6 +1485,7 @@ class FedACTDefense(BaseDefense):
         self.detector: Optional[GradientDetector] = None
         self.committee = Committee(size=committee_size)
         # 【改进】使用带累积证据功能的 EvidenceChain
+        # 增加累积窗口到5轮，确认阈值到3次，降低误报
         self.evidence = EvidenceChain(
             accumulation_window=accumulation_window,
             anomaly_confirm_threshold=anomaly_confirm_threshold

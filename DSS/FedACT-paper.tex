@@ -117,7 +117,7 @@ FedACT defends against Byzantine attacks through three integrated stages, each i
 
 The first stage learns a low-dimensional representation of benign gradient distributions using an autoencoder trained on historical normal gradients. For each incoming gradient $\mathbf{g}_i$, we compute two complementary metrics: reconstruction error $e_i = \|\mathbf{g}_i - \psi(\phi(\mathbf{g}_i))\|^2$ captures deviation from the learned manifold, while latent deviation $d_i = \|\phi(\mathbf{g}_i) - \boldsymbol{\mu}_z\|$ measures distance from the normal gradient centroid in latent space. These metrics are max-normalized and combined as $a_i = 0.7\tilde{e}_i + 0.3\tilde{d}_i$, weighting reconstruction error more heavily as it better captures structural violations.
 
-Rather than making binary decisions, we partition gradients into three zones using MAD-based adaptive thresholding. The threshold $\tau = \text{med}(\mathbf{a}) + 2.5 \cdot 1.4826 \cdot \text{MAD}(\mathbf{a})$ adapts to the score distribution each round. Gradients with scores below $0.7\tau$ are classified as normal, those above $1.5\tau$ as anomalous, and intermediate scores fall into an uncertain zone requiring further adjudication. This three-zone approach acknowledges the fundamental difficulty of distinguishing sophisticated attacks from legitimate heterogeneity based on anomaly scores alone.
+Rather than making binary decisions, we partition gradients into three zones using MAD-based adaptive thresholding. The threshold $\tau = \text{med}(\mathbf{a}) + 3.5 \cdot 1.4826 \cdot \text{MAD}(\mathbf{a})$ adapts to the score distribution each round, with $k=3.5$ chosen to balance detection sensitivity against false positives under data heterogeneity. A minimum threshold protection ensures $\tau \geq Q_{0.75}(\mathbf{a})$ when MAD is small, preventing over-detection when scores cluster tightly. Gradients with scores below $0.7\tau$ are classified as normal, those above $1.5\tau$ as anomalous, and intermediate scores fall into an uncertain zone requiring further adjudication. This three-zone approach acknowledges the fundamental difficulty of distinguishing sophisticated attacks from legitimate heterogeneity based on anomaly scores alone.
 
 \begin{algorithm}[h]
 \caption{Autoencoder-Based Three-Zone Detection}
@@ -130,7 +130,7 @@ Rather than making binary decisions, we partition gradients into three zones usi
     \STATE $d_i \gets \|\phi(\mathbf{g}_i) - \boldsymbol{\mu}_z\|$
     \STATE $a_i \gets 0.7 \cdot \tilde{e}_i + 0.3 \cdot \tilde{d}_i$
 \ENDFOR
-\STATE $\tau \gets \text{med}(\mathbf{a}) + 2.5 \cdot 1.4826 \cdot \text{MAD}(\mathbf{a})$
+\STATE $\tau \gets \text{med}(\mathbf{a}) + 3.5 \cdot 1.4826 \cdot \text{MAD}(\mathbf{a})$
 \STATE $\mathcal{N} \gets \{i: a_i < 0.7\tau\}$
 \STATE $\mathcal{U} \gets \{i: 0.7\tau \leq a_i < 1.5\tau\}$
 \STATE $\mathcal{A} \gets \{i: a_i \geq 1.5\tau\}$
@@ -140,9 +140,9 @@ Rather than making binary decisions, we partition gradients into three zones usi
 
 \subsection{Stage 2: Diversity-Constrained Committee Voting}
 
-Borderline cases in the uncertain zone are resolved through committee voting. We select $K=5$ committee members from the normal set $\mathcal{N}$, maximizing diversity to ensure the committee represents varied but legitimate gradient directions. The first member has highest reputation; subsequent members are chosen to minimize maximum cosine similarity to already-selected members. Each committee member votes on whether an uncertain gradient is anomalous based on cosine similarity: if similarity falls below threshold $\gamma=0.3$, the member votes to flag the gradient. Majority voting determines the final classification.
+Borderline cases in the uncertain zone are resolved through committee voting. We select $K=5$ committee members from the normal set $\mathcal{N}$, maximizing diversity to ensure the committee represents varied but legitimate gradient directions. The first member has highest reputation; subsequent members are chosen to minimize maximum cosine similarity to already-selected members. Each committee member votes on whether an uncertain gradient is anomalous based on cosine similarity: if similarity falls below threshold $\gamma=0.5$, the member votes to flag the gradient. The elevated threshold (compared to typical similarity thresholds) accounts for natural gradient divergence under data heterogeneity. Majority voting determines the final classification.
 
-This mechanism addresses a key limitation of single-threshold detection. Under heterogeneity, some legitimate gradients will have elevated anomaly scores simply because they represent minority data distributions. A diverse committee drawn from normal clients provides multiple reference points, reducing false positives while maintaining sensitivity to genuine attacks that deviate from all normal directions.
+This mechanism addresses a key limitation of single-threshold detection. Under heterogeneity, some legitimate gradients will have elevated anomaly scores simply because they represent minority data distributions. A diverse committee drawn from normal clients provides multiple reference points, reducing false positives while maintaining sensitivity to genuine attacks that deviate from all normal directions. Additionally, our evidence accumulation mechanism requires consistent anomaly detection across multiple rounds (3 out of 5 consecutive rounds) before confirming a client as malicious, further reducing transient false positives.
 
 \begin{algorithm}[h]
 \caption{Diversity-Constrained Committee Voting}

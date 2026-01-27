@@ -1,0 +1,121 @@
+{
+  "config": {
+    "dataset": "Xinwang",
+    "heterogeneity": "quantity_skew",
+    "defense_mode": "fedact",
+    "attack_mode": "gaussian",
+    "malicious_ratio": 0.3,
+    "num_clients": 10,
+    "global_rounds": 100,
+    "anomaly_lower_coef": 0.7,
+    "anomaly_upper_coef": 1.5
+  },
+  "malicious_clients": [
+    3,
+    4,
+    7
+  ],
+  "round_by_round": [
+    {
+      "round": 1,
+      "final_tp": 0,
+      "final_fp": 0,
+      "final_tn": 7,
+      "final_fn": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.7,
+      "total_clients": 10,
+      "malicious_detected": 0,
+      "malicious_total": 3,
+      "ae_tp": 0,
+      "ae_fp": 0,
+      "ae_tn": 7,
+      "ae_fn": 3
+    },
+    {
+      "round": 2,
+      "final_tp": 0,
+      "final_fp": 0,
+      "final_tn": 7,
+      "final_fn": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.7,
+      "total_clients": 10,
+      "malicious_detected": 0,
+      "malicious_total": 3,
+      "ae_tp": 0,
+      "ae_fp": 0,
+      "ae_tn": 7,
+      "ae_fn": 3
+    },
+    {
+      "round": 3,
+      "final_tp": 0,
+      "final_fp": 0,
+      "final_tn": 7,
+      "final_fn": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.7,
+      "total_clients": 10,
+      "malicious_detected": 0,
+      "malicious_total": 3,
+      "ae_tp": 0,
+      "ae_fp": 0,
+      "ae_tn": 7,
+      "ae_fn": 3
+    },
+    {
+      "round": 4,
+      "final_tp": 0,
+      "final_fp": 0,
+      "final_tn": 7,
+      "final_fn": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.7,
+      "total_clients": 10,
+      "malicious_detected": 0,
+      "malicious_total": 3,
+      "ae_tp": 0,
+      "ae_fp": 0,
+      "ae_tn": 7,
+      "ae_fn": 3
+    },
+    {
+      "round": 5,
+      "final_tp": 0,
+      "final_fp": 0,
+      "final_tn": 7,
+      "final_fn": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.7,
+      "total_clients": 10,
+      "malicious_detected": 0,
+      "malicious_total": 3,
+      "ae_tp": 0,
+      "ae_fp": 0,
+      "ae_tn": 7,
+      "ae_fn": 3
+    }
+  ],
+  "cumulative": {
+    "tp": 285,
+    "fp": 665,
+    "tn": 35,
+    "fn": 15
+  },
+  "overall_metrics": {
+    "precision": 0.3,
+    "recall": 0.95,
+    "accuracy": 0.32
+  }
+}
