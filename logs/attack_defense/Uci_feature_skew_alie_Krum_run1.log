@@ -1,0 +1,322 @@
+实验: Uci_feature_skew_alie_Krum_run1
+物理GPU ID: 3
+CUDA_VISIBLE_DEVICES: 3
+时间: 2026-01-24 23:48:05
+命令: /miniconda3/bin/python flcore/main.py -data Uci -algo FedAvg -nc 10 -gr 100 -ls 5 -lbs 64 -lr 0.01 -eg 10 -t 1 --heterogeneity feature_skew --enable_attack True --attack_mode alie --malicious_ratio 0.3 --defense_mode krum --use_tlbo False --tlbo_iterations 10 --use_autoencoder False --use_committee False
+工作目录: /root/DecisionSupportSystem-FedACT/system
+
+[GPU] 使用环境变量指定的GPU: CUDA_VISIBLE_DEVICES=3
+============================================================
+实验配置:
+============================================================
+  goal: test
+  device: cuda
+  device_id: 0
+  dataset: Uci
+  heterogeneity: feature_skew
+  model: auto
+  num_classes: 2
+  batch_size: 64
+  local_learning_rate: 0.01
+  global_rounds: 100
+  local_epochs: 5
+  algorithm: FedAvg
+  num_clients: 10
+  join_ratio: 1.0
+  random_join_ratio: False
+  prev: 0
+  times: 1
+  eval_gap: 10
+  save_folder_name: results
+  learning_rate_decay: False
+  learning_rate_decay_gamma: 0.99
+  few_shot: 0
+  time_select: False
+  time_threthold: 10000
+  top_cnt: 100
+  auto_break: False
+  client_drop_rate: 0.0
+  train_slow_rate: 0.0
+  send_slow_rate: 0.0
+  dlg_eval: False
+  dlg_gap: 100
+  batch_num_per_client: 2
+  num_new_clients: 0
+  fine_tuning_epoch_new: 0
+  mu: 0.01
+  beta: 0.0
+  lamda: 1.0
+  tau: 1.0
+  plocal_epochs: 1
+  server_learning_rate: 1.0
+  enable_attack: True
+  attack_mode: alie
+  malicious_ratio: 0.3
+  attack_scale: 3.0
+  defense_mode: krum
+  use_autoencoder: False
+  autoencoder_latent_dim: 64
+  autoencoder_epochs: 20
+  committee_size: 5
+  vote_threshold: 0.5
+  anomaly_threshold: 0.5
+  anomaly_lower_coef: 0.7
+  anomaly_upper_coef: 1.5
+  use_committee: False
+  tlbo_iterations: 10
+  use_tlbo: False
+  use_merkle: True
+  use_incentive: True
+============================================================
+
+============= 第 1 次实验 =============
+正在初始化服务器和客户端...
+数据集: Uci, 特征维度: 23
+模型参数量: 189,330
+
+Join ratio / total clients: 1.0 / 10
+Finished creating server and clients.
+
+-------------Round number: 0-------------
+
+Evaluate global model
+Averaged Train Loss: 0.6905
+Averaged Test Accuracy: 0.5856
+Averaged Test AUC: 0.5178
+Averaged Test Precision: 0.6416
+Averaged Test Recall: 0.5856
+Averaged Test F1-Score: 0.5989
+Std Test Accuracy: 0.1062
+Std Test AUC: 0.0476
+------------------------- time cost ------------------------- 7.517065048217773
+------------------------- time cost ------------------------- 6.379310369491577
+------------------------- time cost ------------------------- 6.370633602142334
+------------------------- time cost ------------------------- 6.292909383773804
+------------------------- time cost ------------------------- 6.041928052902222
+------------------------- time cost ------------------------- 6.495077610015869
+------------------------- time cost ------------------------- 6.438540935516357
+------------------------- time cost ------------------------- 7.019538640975952
+------------------------- time cost ------------------------- 6.802154302597046
+------------------------- time cost ------------------------- 6.762144088745117
+
+-------------Round number: 10-------------
+
+Evaluate global model
+Averaged Train Loss: 0.4949
+Averaged Test Accuracy: 0.7413
+Averaged Test AUC: 0.7423
+Averaged Test Precision: 0.7280
+Averaged Test Recall: 0.7413
+Averaged Test F1-Score: 0.6498
+Std Test Accuracy: 0.0999
+Std Test AUC: 0.0621
+------------------------- time cost ------------------------- 7.890656471252441
+------------------------- time cost ------------------------- 6.87775731086731
+------------------------- time cost ------------------------- 6.263494968414307
+------------------------- time cost ------------------------- 6.248997926712036
+------------------------- time cost ------------------------- 6.282029390335083
+------------------------- time cost ------------------------- 6.3870837688446045
+------------------------- time cost ------------------------- 6.365319728851318
+------------------------- time cost ------------------------- 6.298459768295288
+------------------------- time cost ------------------------- 6.237365007400513
+------------------------- time cost ------------------------- 6.36701774597168
+
+-------------Round number: 20-------------
+
+Evaluate global model
+Averaged Train Loss: 0.4752
+Averaged Test Accuracy: 0.7744
+Averaged Test AUC: 0.7555
+Averaged Test Precision: 0.7738
+Averaged Test Recall: 0.7744
+Averaged Test F1-Score: 0.7354
+Std Test Accuracy: 0.0851
+Std Test AUC: 0.0605
+------------------------- time cost ------------------------- 7.20214319229126
+------------------------- time cost ------------------------- 6.268913984298706
+------------------------- time cost ------------------------- 6.215991258621216
+------------------------- time cost ------------------------- 6.23021936416626
+------------------------- time cost ------------------------- 6.203240156173706
+------------------------- time cost ------------------------- 6.376039981842041
+------------------------- time cost ------------------------- 6.425361394882202
+------------------------- time cost ------------------------- 6.274680852890015
+------------------------- time cost ------------------------- 6.232124090194702
+------------------------- time cost ------------------------- 6.313554286956787
+
+-------------Round number: 30-------------
+
+Evaluate global model
+Averaged Train Loss: 0.4718
+Averaged Test Accuracy: 0.7768
+Averaged Test AUC: 0.7617
+Averaged Test Precision: 0.7735
+Averaged Test Recall: 0.7768
+Averaged Test F1-Score: 0.7433
+Std Test Accuracy: 0.0821
+Std Test AUC: 0.0596
+------------------------- time cost ------------------------- 7.406092166900635
+------------------------- time cost ------------------------- 6.160857677459717
+------------------------- time cost ------------------------- 6.213251829147339
+------------------------- time cost ------------------------- 6.273390293121338
+------------------------- time cost ------------------------- 6.223380088806152
+------------------------- time cost ------------------------- 6.335148811340332
+------------------------- time cost ------------------------- 6.42057204246521
+------------------------- time cost ------------------------- 6.251819133758545
+------------------------- time cost ------------------------- 6.226686000823975
+------------------------- time cost ------------------------- 6.351784944534302
+
+-------------Round number: 40-------------
+
+Evaluate global model
+Averaged Train Loss: 0.4702
+Averaged Test Accuracy: 0.7769
+Averaged Test AUC: 0.7650
+Averaged Test Precision: 0.7726
+Averaged Test Recall: 0.7769
+Averaged Test F1-Score: 0.7456
+Std Test Accuracy: 0.0784
+Std Test AUC: 0.0585
+------------------------- time cost ------------------------- 7.378347635269165
+------------------------- time cost ------------------------- 6.1919496059417725
+------------------------- time cost ------------------------- 6.302570343017578
+------------------------- time cost ------------------------- 6.326930522918701
+------------------------- time cost ------------------------- 6.324554443359375
+------------------------- time cost ------------------------- 6.260236024856567
+------------------------- time cost ------------------------- 6.389081239700317
+------------------------- time cost ------------------------- 6.321702003479004
+------------------------- time cost ------------------------- 6.31020450592041
+------------------------- time cost ------------------------- 6.266365051269531
+
+-------------Round number: 50-------------
+
+Evaluate global model
+Averaged Train Loss: 0.4685
+Averaged Test Accuracy: 0.7803
+Averaged Test AUC: 0.7674
+Averaged Test Precision: 0.7763
+Averaged Test Recall: 0.7803
+Averaged Test F1-Score: 0.7505
+Std Test Accuracy: 0.0754
+Std Test AUC: 0.0566
+------------------------- time cost ------------------------- 7.530325889587402
+------------------------- time cost ------------------------- 6.193128347396851
+------------------------- time cost ------------------------- 6.254442453384399
+------------------------- time cost ------------------------- 6.274522304534912
+------------------------- time cost ------------------------- 6.345768690109253
+------------------------- time cost ------------------------- 6.305006504058838
+------------------------- time cost ------------------------- 6.321687459945679
+------------------------- time cost ------------------------- 6.257071018218994
+------------------------- time cost ------------------------- 6.398737907409668
+------------------------- time cost ------------------------- 6.325338363647461
+
+-------------Round number: 60-------------
+
+Evaluate global model
+Averaged Train Loss: 0.4690
+Averaged Test Accuracy: 0.7808
+Averaged Test AUC: 0.7688
+Averaged Test Precision: 0.7764
+Averaged Test Recall: 0.7808
+Averaged Test F1-Score: 0.7526
+Std Test Accuracy: 0.0745
+Std Test AUC: 0.0549
+------------------------- time cost ------------------------- 7.292841196060181
+------------------------- time cost ------------------------- 6.3568127155303955
+------------------------- time cost ------------------------- 6.311902046203613
+------------------------- time cost ------------------------- 6.294046640396118
+------------------------- time cost ------------------------- 6.249300241470337
+------------------------- time cost ------------------------- 6.370391130447388
+------------------------- time cost ------------------------- 6.479108810424805
+------------------------- time cost ------------------------- 6.318779468536377
+------------------------- time cost ------------------------- 6.184026718139648
+------------------------- time cost ------------------------- 6.333251476287842
+
+-------------Round number: 70-------------
+
+Evaluate global model
+Averaged Train Loss: 0.4681
+Averaged Test Accuracy: 0.7855
+Averaged Test AUC: 0.7703
+Averaged Test Precision: 0.7792
+Averaged Test Recall: 0.7855
+Averaged Test F1-Score: 0.7608
+Std Test Accuracy: 0.0685
+Std Test AUC: 0.0547
+------------------------- time cost ------------------------- 7.516948699951172
+------------------------- time cost ------------------------- 6.387975692749023
+------------------------- time cost ------------------------- 6.2265465259552
+------------------------- time cost ------------------------- 6.170694351196289
+------------------------- time cost ------------------------- 6.205443620681763
+------------------------- time cost ------------------------- 6.35292649269104
+------------------------- time cost ------------------------- 6.355140686035156
+------------------------- time cost ------------------------- 6.263455867767334
+------------------------- time cost ------------------------- 6.226722717285156
+------------------------- time cost ------------------------- 6.273283243179321
+
+-------------Round number: 80-------------
+
+Evaluate global model
+Averaged Train Loss: 0.4663
+Averaged Test Accuracy: 0.7859
+Averaged Test AUC: 0.7718
+Averaged Test Precision: 0.7805
+Averaged Test Recall: 0.7859
+Averaged Test F1-Score: 0.7607
+Std Test Accuracy: 0.0681
+Std Test AUC: 0.0527
+------------------------- time cost ------------------------- 7.331555128097534
+------------------------- time cost ------------------------- 6.284445762634277
+------------------------- time cost ------------------------- 6.148590326309204
+------------------------- time cost ------------------------- 6.1418867111206055
+------------------------- time cost ------------------------- 6.260253190994263
+------------------------- time cost ------------------------- 6.295513153076172
+------------------------- time cost ------------------------- 6.259793758392334
+------------------------- time cost ------------------------- 6.283904552459717
+------------------------- time cost ------------------------- 6.184579133987427
+------------------------- time cost ------------------------- 6.29768443107605
+
+-------------Round number: 90-------------
+
+Evaluate global model
+Averaged Train Loss: 0.4666
+Averaged Test Accuracy: 0.7844
+Averaged Test AUC: 0.7725
+Averaged Test Precision: 0.7795
+Averaged Test Recall: 0.7844
+Averaged Test F1-Score: 0.7596
+Std Test Accuracy: 0.0715
+Std Test AUC: 0.0532
+------------------------- time cost ------------------------- 7.223306179046631
+------------------------- time cost ------------------------- 6.442038059234619
+------------------------- time cost ------------------------- 6.147374153137207
+------------------------- time cost ------------------------- 6.322279930114746
+------------------------- time cost ------------------------- 6.113891839981079
+------------------------- time cost ------------------------- 6.17504358291626
+------------------------- time cost ------------------------- 6.282744407653809
+------------------------- time cost ------------------------- 6.288747310638428
+------------------------- time cost ------------------------- 6.216507911682129
+------------------------- time cost ------------------------- 6.37376070022583
+
+-------------Round number: 100-------------
+
+Evaluate global model
+Averaged Train Loss: 0.4664
+Averaged Test Accuracy: 0.7803
+Averaged Test AUC: 0.7731
+Averaged Test Precision: 0.7788
+Averaged Test Recall: 0.7803
+Averaged Test F1-Score: 0.7510
+Std Test Accuracy: 0.0785
+Std Test AUC: 0.0521
+------------------------- time cost ------------------------- 7.260638952255249
+
+Best accuracy.
+0.7858666666666667
+
+Average time cost per round.
+6.422077784538269
+File path: results/Uci_FedAvg_test/Uci_FedAvg_test_0.h5
+Training process CSV file path: results/Uci_FedAvg_test/Uci_FedAvg_test_0_training_process.csv
+Training process data saved to: results/Uci_FedAvg_test/Uci_FedAvg_test_0_training_process.csv
+
+平均训练时间: 651.14秒

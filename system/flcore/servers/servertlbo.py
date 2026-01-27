@@ -88,7 +88,11 @@ class FedTLBO(Server):
                 tlbo_iterations=getattr(args, 'tlbo_iterations', 10),
                 autoencoder_epochs=getattr(args, 'autoencoder_epochs', 20),
                 vote_threshold=getattr(args, 'vote_threshold', 0.3),
-                dataset_type=self.dataset_type
+                dataset_type=self.dataset_type,
+                # 【改进】多轮累积证据机制参数
+                accumulation_window=getattr(args, 'accumulation_window', 3),
+                anomaly_confirm_threshold=getattr(args, 'anomaly_confirm_threshold', 2),
+                server=self,
             )
             # 消融实验开关
             self.use_committee = getattr(args, 'use_committee', True)
@@ -113,7 +117,7 @@ class FedTLBO(Server):
                 self.defense_strategy = None
         
         # TLBO聚合器
-        self.tlbo = TLBODefense(iterations=getattr(args, 'tlbo_iterations', 10))
+        self.tlbo = TLBODefense(iterations=getattr(args, 'tlbo_iterations', 10), server=self)
         
         # ============ 攻击配置 (由客户端执行) ============
         self.enable_attack = getattr(args, 'enable_attack', False)
@@ -232,6 +236,27 @@ class FedTLBO(Server):
         
         return result
     
+    def _convert_to_native_types(self, obj):
+        """递归将numpy类型转换为Python原生类型，确保JSON可序列化"""
+        import numpy as np
+        
+        if isinstance(obj, dict):
+            return {k: self._convert_to_native_types(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [self._convert_to_native_types(item) for item in obj]
+        elif isinstance(obj, set):
+            return [self._convert_to_native_types(item) for item in obj]
+        elif isinstance(obj, (np.integer, np.int64, np.int32)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float64, np.float32)):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        else:
+            return obj
+    
     def _save_detection_stats(self):
         """保存检测统计结果到文件（JSON + Excel）"""
         if not self.detection_stats:
@@ -246,7 +271,8 @@ class FedTLBO(Server):
         
         # 获取数据集和异质性类型
         dataset_name = getattr(self, 'dataset', 'unknown')
-        heterogeneity = getattr(self.args, 'partition', 'iid') if hasattr(self, 'args') else 'iid'
+        # 优先使用 heterogeneity 参数（命令行参数），fallback 到 partition
+        heterogeneity = getattr(self.args, 'heterogeneity', None) or getattr(self.args, 'partition', 'iid')
         
         # 生成文件名（包含更多信息）
         base_filename = f"{dataset_name}_{heterogeneity}_{self.defense_mode}_{self.attack_mode}"
@@ -272,16 +298,16 @@ class FedTLBO(Server):
                 'heterogeneity': heterogeneity,
                 'defense_mode': self.defense_mode,
                 'attack_mode': self.attack_mode,
-                'malicious_ratio': self.malicious_ratio,
-                'num_clients': self.num_clients,
-                'global_rounds': self.global_rounds,
-                'anomaly_lower_coef': self.anomaly_lower_coef,
-                'anomaly_upper_coef': self.anomaly_upper_coef,
+                'malicious_ratio': float(self.malicious_ratio),
+                'num_clients': int(self.num_clients),
+                'global_rounds': int(self.global_rounds),
+                'anomaly_lower_coef': float(self.anomaly_lower_coef),
+                'anomaly_upper_coef': float(self.anomaly_upper_coef),
             },
-            'malicious_clients': list(self.malicious_ids),
-            'round_by_round': self.detection_stats,
-            'cumulative': self.cumulative_stats,
-            'overall_metrics': overall_metrics
+            'malicious_clients': [int(x) for x in self.malicious_ids],  # 转换为Python int
+            'round_by_round': self._convert_to_native_types(self.detection_stats),
+            'cumulative': {k: int(v) for k, v in self.cumulative_stats.items()},  # 转换为Python int
+            'overall_metrics': {k: float(v) for k, v in overall_metrics.items()}  # 转换为Python float
         }
         
         with open(json_filepath, 'w', encoding='utf-8') as f:

@@ -275,12 +275,55 @@ class TLBOAggregator:
     """
     Teaching-Learning Based Optimization聚合
     
-    - Teacher阶段: 向最优学习
-    - Learner阶段: 学习者互学
+    - Teacher阶段: 向最优accuracy的梯度学习
+    - Learner阶段: 学习者互学（基于accuracy）
     """
     
-    def __init__(self, iterations: int = 10):
+    def __init__(self, iterations: int = 10, server=None):
         self.iterations = iterations
+        self.server = server  # 需要server来评估accuracy
+    
+    def _compute_fitness(self, gradient: torch.Tensor) -> float:
+        """
+        计算梯度的fitness（基于accuracy）
+        临时应用梯度，测试accuracy，然后恢复
+        """
+        if self.server is None:
+            # Fallback: 使用余弦相似度
+            return 0.0
+        
+        # 保存当前模型参数
+        old_params = [p.data.clone() for p in self.server.global_model.parameters()]
+        
+        # 临时应用梯度
+        idx = 0
+        for param in self.server.global_model.parameters():
+            num_params = param.numel()
+            param.data -= gradient[idx:idx+num_params].view(param.shape)
+            idx += num_params
+        
+        # 快速评估accuracy（使用部分数据）
+        self.server.global_model.eval()
+        with torch.no_grad():
+            correct = 0
+            total = 0
+            # 只用前100个batch快速估计
+            for batch_idx, (x, y) in enumerate(self.server.testloaderfull):
+                if batch_idx >= 10:  # 只用10个batch快速评估
+                    break
+                x, y = x.to(self.server.device), y.to(self.server.device)
+                output = self.server.global_model(x)
+                pred = output.argmax(dim=1)
+                correct += pred.eq(y).sum().item()
+                total += y.size(0)
+        
+        accuracy = correct / total if total > 0 else 0.0
+        
+        # 恢复原始参数
+        for param, old_p in zip(self.server.global_model.parameters(), old_params):
+            param.data.copy_(old_p)
+        
+        return accuracy
     
     def aggregate(
         self,
@@ -288,7 +331,7 @@ class TLBOAggregator:
         weights: Dict[int, float],
         client_ids: List[int]
     ) -> torch.Tensor:
-        """TLBO聚合"""
+        """TLBO聚合：基于accuracy优化"""
         if len(gradients) == 0:
             raise ValueError("No gradients to aggregate")
         if len(gradients) == 1:
@@ -300,13 +343,14 @@ class TLBOAggregator:
         w_list = [w/w_sum for w in w_list]
         
         result = sum(w * g for w, g in zip(w_list, gradients))
-        
         learners = [g.clone() for g in gradients]
         
-        for _ in range(self.iterations):
-            # Teacher阶段
-            sims = [F.cosine_similarity(l.unsqueeze(0), result.unsqueeze(0)).item() for l in learners]
-            teacher_idx = np.argmax(sims)
+        for iter_num in range(self.iterations):
+            # 计算所有learner的fitness（accuracy）
+            fitness = [self._compute_fitness(l) for l in learners]
+            
+            # Teacher阶段：选择accuracy最高的作为teacher
+            teacher_idx = np.argmax(fitness)
             teacher = learners[teacher_idx]
             mean_l = torch.stack(learners).mean(dim=0)
             TF = np.random.choice([1, 2])
@@ -314,21 +358,25 @@ class TLBOAggregator:
             for i, l in enumerate(learners):
                 r = np.random.random()
                 new_l = l + r * (teacher - TF * mean_l)
-                if F.cosine_similarity(new_l.unsqueeze(0), result.unsqueeze(0)).item() > sims[i]:
+                new_fitness = self._compute_fitness(new_l)
+                if new_fitness > fitness[i]:
                     learners[i] = new_l
+                    fitness[i] = new_fitness
             
-            # Learner阶段
+            # Learner阶段：基于accuracy相互学习
             for i in range(len(learners)):
                 j = np.random.choice([k for k in range(len(learners)) if k != i])
-                si = F.cosine_similarity(learners[i].unsqueeze(0), result.unsqueeze(0)).item()
-                sj = F.cosine_similarity(learners[j].unsqueeze(0), result.unsqueeze(0)).item()
                 r = np.random.random()
-                diff = learners[j] - learners[i] if sj > si else learners[i] - learners[j]
+                # 如果j的accuracy更高，向j学习；否则远离j
+                diff = learners[j] - learners[i] if fitness[j] > fitness[i] else learners[i] - learners[j]
                 new_l = learners[i] + r * diff
-                if F.cosine_similarity(new_l.unsqueeze(0), result.unsqueeze(0)).item() > si:
+                new_fitness = self._compute_fitness(new_l)
+                if new_fitness > fitness[i]:
                     learners[i] = new_l
+                    fitness[i] = new_fitness
             
-            result = torch.stack(learners).mean(dim=0)
+            # 选择fitness最高的作为当前最优解
+            result = learners[np.argmax(fitness)]
         
         return result
 
@@ -363,7 +411,7 @@ class FedCTI(Server):
         self.detector = None
         self.committee = Committee(size=getattr(args, 'committee_size', 5))
         self.evidence = EvidenceChain()
-        self.tlbo = TLBOAggregator(iterations=getattr(args, 'tlbo_iterations', 10))
+        self.tlbo = TLBOAggregator(iterations=getattr(args, 'tlbo_iterations', 10), server=self)
         
         # 攻击配置
         self.enable_attack = getattr(args, 'enable_attack', False)

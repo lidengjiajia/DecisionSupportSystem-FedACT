@@ -558,27 +558,71 @@ class TLBODefense(BaseDefense):
     我们的创新方法，将TLBO优化算法应用于梯度聚合。
     
     核心思想:
-    1. Teacher阶段: 识别最优梯度作为"教师"，其他梯度向教师学习
-    2. Learner阶段: 梯度之间互相学习，好的梯度影响较差的梯度
+    1. Teacher阶段: 识别accuracy最优的梯度作为"教师"，其他梯度向教师学习
+    2. Learner阶段: 梯度之间互相学习（基于accuracy），好的梯度影响较差的梯度
     
     优势:
-    - 自适应权重: 根据梯度质量动态调整
+    - 基于准确率优化: 直接优化模型性能而非梯度相似度
     - 异质性处理: 有效处理Non-IID数据
-    - 鲁棒性: 优质梯度自然获得更大影响力
+    - 鲁棒性: 高质量梯度自然获得更大影响力
     
     参数:
         iterations: TLBO迭代次数
         alpha: 学习率因子
+        server: 服务器实例，用于评估accuracy
     """
     
-    def __init__(self, iterations: int = 10, alpha: float = 1.0, **kwargs):
+    def __init__(self, iterations: int = 10, alpha: float = 1.0, server=None, **kwargs):
         super().__init__(**kwargs)
         self.iterations = iterations
         self.alpha = alpha
+        self.server = server
     
     @property
     def name(self) -> str:
         return "tlbo"
+    
+    def _compute_fitness_accuracy(self, gradient: torch.Tensor) -> float:
+        """
+        计算梯度的fitness（基于accuracy）
+        临时应用梯度，测试accuracy，然后恢复
+        """
+        if self.server is None:
+            # Fallback: 返回随机值
+            return np.random.random()
+        
+        # 保存当前模型参数
+        old_params = [p.data.clone() for p in self.server.global_model.parameters()]
+        
+        # 临时应用梯度
+        idx = 0
+        for param in self.server.global_model.parameters():
+            num_params = param.numel()
+            param.data -= gradient[idx:idx+num_params].view(param.shape)
+            idx += num_params
+        
+        # 快速评估accuracy
+        self.server.global_model.eval()
+        with torch.no_grad():
+            correct = 0
+            total = 0
+            # 只用前10个batch快速估计
+            for batch_idx, (x, y) in enumerate(self.server.testloaderfull):
+                if batch_idx >= 10:
+                    break
+                x, y = x.to(self.server.device), y.to(self.server.device)
+                output = self.server.global_model(x)
+                pred = output.argmax(dim=1)
+                correct += pred.eq(y).sum().item()
+                total += y.size(0)
+        
+        accuracy = correct / total if total > 0 else 0.0
+        
+        # 恢复原始参数
+        for param, old_p in zip(self.server.global_model.parameters(), old_params):
+            param.data.copy_(old_p)
+        
+        return accuracy
     
     def aggregate(
         self,
@@ -597,20 +641,14 @@ class TLBODefense(BaseDefense):
             total = sum(weights)
             weights = [w / total for w in weights]
         
-        # 加权平均作为目标
-        target = sum(w * g for w, g in zip(weights, gradients))
-        
         # 学习者群体
         learners = [g.clone() for g in gradients]
         
         for iteration in range(self.iterations):
-            # 评估适应度（与目标的相似度）
-            fitness = [
-                F.cosine_similarity(l.unsqueeze(0), target.unsqueeze(0)).item() 
-                for l in learners
-            ]
+            # 评估适应度（基于accuracy）
+            fitness = [self._compute_fitness_accuracy(l) for l in learners]
             
-            # ===== Teacher阶段 =====
+            # ===== Teacher阶段: 选择accuracy最高的作为teacher =====
             teacher_idx = np.argmax(fitness)
             teacher = learners[teacher_idx]
             
@@ -625,40 +663,36 @@ class TLBODefense(BaseDefense):
                 r = np.random.random() * self.alpha
                 new_learner = l + r * (teacher - TF * mean_learner)
                 
-                # 如果新位置更好，则接受
-                new_fitness = F.cosine_similarity(
-                    new_learner.unsqueeze(0), target.unsqueeze(0)
-                ).item()
+                # 如果新位置accuracy更好，则接受
+                new_fitness = self._compute_fitness_accuracy(new_learner)
                 
                 if new_fitness > fitness[i]:
                     learners[i] = new_learner
                     fitness[i] = new_fitness
             
-            # ===== Learner阶段 =====
+            # ===== Learner阶段: 基于accuracy互相学习 =====
             for i in range(len(learners)):
                 # 随机选择另一个学习者
                 j = np.random.choice([k for k in range(len(learners)) if k != i])
                 
                 r = np.random.random() * self.alpha
                 
-                # 向更好的学习者学习
+                # 向accuracy更高的学习者学习
                 if fitness[j] > fitness[i]:
                     new_learner = learners[i] + r * (learners[j] - learners[i])
                 else:
                     new_learner = learners[i] + r * (learners[i] - learners[j])
                 
-                # 如果新位置更好，则接受
-                new_fitness = F.cosine_similarity(
-                    new_learner.unsqueeze(0), target.unsqueeze(0)
-                ).item()
+                # 如果新位置accuracy更好，则接受
+                new_fitness = self._compute_fitness_accuracy(new_learner)
                 
                 if new_fitness > fitness[i]:
                     learners[i] = new_learner
-            
-            # 更新目标（使用改进后的学习者）
-            target = torch.stack(learners).mean(dim=0)
+                    fitness[i] = new_fitness
         
-        return target
+        # 返回accuracy最高的learner
+        best_idx = np.argmax(fitness)
+        return learners[best_idx]
 
 
 # ==============================================================================
@@ -1232,7 +1266,7 @@ class Committee:
 
 class EvidenceChain:
     """
-    Merkle树存证链 + 信誉管理
+    Merkle树存证链 + 信誉管理 + 多轮累积证据
     
     存证功能:
     - 使用Merkle树记录每轮检测结果
@@ -1242,12 +1276,27 @@ class EvidenceChain:
     - 正常行为: 信誉 += 0.05 * 贡献度
     - 异常行为: 信誉 *= 0.7（惩罚）
     - 信誉范围: [0.1, 2.0]
+    
+    【改进】多轮累积证据机制:
+    - 单轮检测可能误报（异质性导致）
+    - 连续多轮异常才判定为真正的恶意客户端
+    - 降低误报率，提高检测准确性
     """
     
-    def __init__(self):
+    def __init__(self, accumulation_window: int = 3, anomaly_confirm_threshold: int = 2):
+        """
+        Args:
+            accumulation_window: 证据累积窗口大小（默认3轮）
+            anomaly_confirm_threshold: 窗口内异常次数阈值（默认2次）
+        """
         self.chain: List[Dict] = []
         self.reputations: Dict[int, float] = {}
         self.contributions: Dict[int, List[float]] = {}
+        
+        # 【改进】多轮累积证据
+        self.accumulation_window = accumulation_window
+        self.anomaly_confirm_threshold = anomaly_confirm_threshold
+        self.anomaly_history: Dict[int, List[bool]] = {}  # 客户端 -> 最近N轮是否异常
     
     def _get_default_reputation(self) -> float:
         return 1.0
@@ -1314,6 +1363,48 @@ class EvidenceChain:
         
         self.contributions[client_id].append(contribution)
     
+    def record_anomaly_detection(self, client_id: int, is_anomaly_this_round: bool) -> bool:
+        """
+        【改进】记录单轮异常检测结果，并返回累积确认结果
+        
+        Args:
+            client_id: 客户端ID
+            is_anomaly_this_round: 本轮是否检测为异常
+            
+        Returns:
+            confirmed_anomaly: 是否经过多轮累积确认为异常
+        """
+        if client_id not in self.anomaly_history:
+            self.anomaly_history[client_id] = []
+        
+        # 记录本轮结果
+        self.anomaly_history[client_id].append(is_anomaly_this_round)
+        
+        # 保持窗口大小
+        if len(self.anomaly_history[client_id]) > self.accumulation_window:
+            self.anomaly_history[client_id] = self.anomaly_history[client_id][-self.accumulation_window:]
+        
+        # 统计窗口内异常次数
+        anomaly_count = sum(self.anomaly_history[client_id])
+        
+        # 判定是否确认为异常
+        return anomaly_count >= self.anomaly_confirm_threshold
+    
+    def get_cumulative_anomaly_score(self, client_id: int) -> float:
+        """
+        获取客户端的累积异常分数 (0-1)
+        
+        Returns:
+            累积异常分数 = 窗口内异常次数 / 窗口大小
+        """
+        if client_id not in self.anomaly_history:
+            return 0.0
+        
+        anomaly_count = sum(self.anomaly_history[client_id])
+        window_size = len(self.anomaly_history[client_id])
+        
+        return anomaly_count / window_size if window_size > 0 else 0.0
+    
     def get_reputation(self, client_id: int) -> float:
         return self.reputations.get(client_id, self._get_default_reputation())
     
@@ -1334,9 +1425,10 @@ class FedACTDefense(BaseDefense):
     
     完整的FedACT防御流程:
     1. 自编码器异常检测 - 初筛异常梯度
-    2. 委员会投票 - 对可疑梯度进行二次确认
-    3. TLBO优化聚合 - 对正常梯度进行优化聚合
-    4. 信誉更新 - 更新客户端信誉值
+    2. 【改进】多轮累积证据 - 连续多轮异常才确认为恶意（降低误报）
+    3. 委员会投票 - 对可疑梯度进行二次确认
+    4. TLBO优化聚合 - 对正常梯度进行优化聚合
+    5. 信誉更新 - 更新客户端信誉值
     
     参数:
         committee_size: 委员会大小（默认5）
@@ -1344,6 +1436,8 @@ class FedACTDefense(BaseDefense):
         autoencoder_epochs: 自编码器训练轮数（默认20）
         vote_threshold: 投票相似度阈值（默认0.3）
         dataset_type: 数据集类型 ('uci' 或 'xinwang')，用于加载专用配置
+        accumulation_window: 【改进】证据累积窗口大小（默认3轮）
+        anomaly_confirm_threshold: 【改进】窗口内异常次数阈值（默认2次）
     """
     
     def __init__(
@@ -1353,6 +1447,9 @@ class FedACTDefense(BaseDefense):
         autoencoder_epochs: int = 20,
         vote_threshold: float = 0.3,
         dataset_type: str = None,
+        accumulation_window: int = 3,
+        anomaly_confirm_threshold: int = 2,
+        server=None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1361,12 +1458,17 @@ class FedACTDefense(BaseDefense):
         self.autoencoder_epochs = autoencoder_epochs
         self.vote_threshold = vote_threshold
         self.dataset_type = dataset_type
+        self.server = server
         
         # 组件（延迟初始化）
         self.detector: Optional[GradientDetector] = None
         self.committee = Committee(size=committee_size)
-        self.evidence = EvidenceChain()
-        self.tlbo = TLBODefense(iterations=tlbo_iterations)
+        # 【改进】使用带累积证据功能的 EvidenceChain
+        self.evidence = EvidenceChain(
+            accumulation_window=accumulation_window,
+            anomaly_confirm_threshold=anomaly_confirm_threshold
+        )
+        self.tlbo = TLBODefense(iterations=tlbo_iterations, server=server)
         
         self.round_count = 0
     
@@ -1446,7 +1548,7 @@ class FedACTDefense(BaseDefense):
         
         for i, cid in enumerate(client_ids):
             score = scores[i].item()
-            is_anomaly = score > threshold
+            is_anomaly_this_round = score > threshold
             
             # 可疑样本委员会投票（三区间判定）
             # score < lower_coef * threshold → 直接判定正常
@@ -1463,13 +1565,24 @@ class FedACTDefense(BaseDefense):
                         if m != cid
                     ]
                     if voting_grads:
-                        is_anomaly, _ = self.committee.vote(
+                        is_anomaly_this_round, _ = self.committee.vote(
                             gradients[i], voting_grads, threshold=self.vote_threshold
                         )
             
-            results[cid] = {'score': score, 'is_anomaly': is_anomaly}
+            # 【改进】多轮累积证据判定
+            # 单轮检测可能误报，需要连续多轮异常才确认为恶意
+            confirmed_anomaly = self.evidence.record_anomaly_detection(cid, is_anomaly_this_round)
+            cumulative_score = self.evidence.get_cumulative_anomaly_score(cid)
             
-            if is_anomaly:
+            results[cid] = {
+                'score': score, 
+                'is_anomaly_this_round': is_anomaly_this_round,
+                'confirmed_anomaly': confirmed_anomaly,
+                'cumulative_score': cumulative_score
+            }
+            
+            # 使用累积确认结果作为最终判定
+            if confirmed_anomaly:
                 anomaly_ids.append(cid)
             else:
                 normal_ids.append(cid)

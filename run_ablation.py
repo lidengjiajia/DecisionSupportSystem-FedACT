@@ -156,10 +156,8 @@ HETEROGENEITY_TYPES = {
 # 消融配置 - 分两部分
 # ================================================================================
 
-# Part 1: FedACT组件消融 (3种)
-# 注: Only_TLBO 和 w/o_TLBO 已合并到 Part 2 (Only_Agg)
-#     Only_TLBO = Only_Agg 中的 FedTLBO
-#     w/o_TLBO 的效果可通过 FedACT_Full vs Only_FedTLBO + Only_FedAvg 分析得出
+# Part 1: FedACT组件消融 (4种)
+# 验证每个组件对FedACT整体性能的贡献
 ABLATION_CONFIGS = {
     "FedACT_Full": {
         "name": "FedACT完整版",
@@ -171,7 +169,7 @@ ABLATION_CONFIGS = {
     },
     "w/o_Autoencoder": {
         "name": "无自编码器",
-        "description": "移除自编码器异常检测",
+        "description": "移除自编码器异常检测（只有Committee+TLBO）",
         "algo": "FedTLBO",
         "use_autoencoder": False,
         "use_committee": True,
@@ -179,11 +177,19 @@ ABLATION_CONFIGS = {
     },
     "w/o_Committee": {
         "name": "无委员会",
-        "description": "移除委员会投票",
+        "description": "移除委员会投票（只有AE+TLBO）",
         "algo": "FedTLBO",
         "use_autoencoder": True,
         "use_committee": False,
         "use_tlbo": True,
+    },
+    "w/o_TLBO": {
+        "name": "无TLBO聚合",
+        "description": "移除TLBO优化（AE+Committee+FedAvg）",
+        "algo": "FedTLBO",
+        "use_autoencoder": True,
+        "use_committee": True,
+        "use_tlbo": False,
     },
 }
 
