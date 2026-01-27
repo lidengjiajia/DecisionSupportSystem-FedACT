@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.1.12)  27 JAN 2026 21:51
+This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.1.12)  27 JAN 2026 21:58
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -424,7 +424,7 @@ Package hyperref Info: Link coloring OFF on input line 29.
 \openout4 = `main.out'.
 
 
-Overfull \hbox (14.15872pt too wide) in paragraph at lines 73--75
+Overfull \hbox (14.15872pt too wide) in paragraph at lines 78--80
 \T1/lmr/m/n/12 FedACT em-ploys a three-stage de-fense pipeline: (1) autoencoder
 -based anomaly
  []
@@ -433,52 +433,52 @@ Overfull \hbox (14.15872pt too wide) in paragraph at lines 73--75
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\<def>-command' on input line 90.
+(hyperref)                removing `\<def>-command' on input line 95.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\cnotenum' on input line 90.
+(hyperref)                removing `\cnotenum' on input line 95.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\<def>-command' on input line 90.
+(hyperref)                removing `\<def>-command' on input line 95.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\@corref' on input line 90.
+(hyperref)                removing `\@corref' on input line 95.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\<def>-command' on input line 90.
+(hyperref)                removing `\<def>-command' on input line 95.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\cnotenum' on input line 90.
+(hyperref)                removing `\cnotenum' on input line 95.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\<def>-command' on input line 90.
+(hyperref)                removing `\<def>-command' on input line 95.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\@corref' on input line 90.
+(hyperref)                removing `\@corref' on input line 95.
 
 [1
 
 ]
-LaTeX Font Info:    Trying to load font information for U+msa on input line 90.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 95.
 
  (c:/texlive/2025/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 90.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 95.
 
 
 (c:/texlive/2025/texmf-dist/tex/latex/amsfonts/umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 )
 LaTeX Font Info:    Trying to load font information for T1+lmtt on input line 9
-0.
+5.
 
 (c:/texlive/2025/texmf-dist/tex/latex/lm/t1lmtt.fd
 File: t1lmtt.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
@@ -488,7 +488,7 @@ File: t1lmtt.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
 
 
 ]
-Overfull \hbox (5.30756pt too wide) in paragraph at lines 106--107
+Overfull \hbox (5.30756pt too wide) in paragraph at lines 111--112
 \T1/lmr/m/n/12 statis-tics and distance-based se-lec-tion. Ro-bust ag-gre-ga-to
 rs such as coordinate-
  []
@@ -500,7 +500,7 @@ rs such as coordinate-
 [3]
 
 [4]
-Overfull \hbox (7.85626pt too wide) in paragraph at lines 155--156
+Overfull \hbox (7.85626pt too wide) in paragraph at lines 160--161
 []\T1/lmr/m/n/12 FedACT de-fends against Byzan-tine at-tacks through three in-t
 e-grated stages,
  []
@@ -509,7 +509,7 @@ e-grated stages,
 
 [5]
 Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
-put line 164.
+put line 169.
 
 
 [6]
@@ -520,7 +520,7 @@ LaTeX Warning: `h' float specifier changed to `ht'.
 
 [7]
 
-LaTeX Warning: Float too large for page by 24.1878pt on input line 266.
+LaTeX Warning: Float too large for page by 24.1878pt on input line 271.
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
@@ -554,12 +554,12 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: A28FE0BC693DA4F92AE67CBDE66BF790;3244.
  ) 
 Here is how much of TeX's memory you used:
- 11422 strings out of 473831
- 170843 string characters out of 5733137
- 584674 words of memory out of 5000000
- 34321 multiletter control sequences out of 15000+600000
+ 11423 strings out of 473831
+ 170846 string characters out of 5733137
+ 584680 words of memory out of 5000000
+ 34322 multiletter control sequences out of 15000+600000
  602771 words of font info for 84 fonts, out of 8000000 for 9000
  1348 hyphenation exceptions out of 8191
  72i,10n,79p,1436b,644s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on main.xdv (16 pages, 68892 bytes).
+Output written on main.xdv (16 pages, 69036 bytes).
