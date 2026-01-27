@@ -36,14 +36,14 @@
             city={Changsha}, postcode={410082}, country={China}}
 
 \begin{abstract}
-Federated learning enables privacy-preserving collaborative credit scoring, yet existing Byzantine-resilient aggregation methods focus solely on maintaining model accuracy without identifying malicious participants. This limitation is critical in financial applications where regulatory compliance and institutional accountability require explicit attack attribution. We propose FedACT, a framework that prioritizes explicit Byzantine detection over implicit robustness. FedACT employs a three-stage pipeline: autoencoder-based anomaly scoring with adaptive thresholding partitions gradients into normal, uncertain, and anomalous zones; diversity-constrained committee voting resolves borderline cases while accommodating legitimate data heterogeneity; and reputation-weighted aggregation with Merkle-tree evidence logging provides long-term incentives and tamper-evident audit trails. Experiments on real-world credit datasets demonstrate that FedACT achieves 89.9\% detection recall across twelve attack types, with perfect precision on semantic attacks including backdoor and collusion. While traditional robust aggregators achieve marginally higher model accuracy by silently filtering outliers, FedACT uniquely provides the detection capability and auditability essential for regulated financial environments.
+Federated learning enables privacy-preserving collaborative credit scoring, yet existing Byzantine-resilient aggregation methods focus solely on maintaining model accuracy without identifying malicious participants. This limitation is critical in financial applications where regulatory compliance and institutional accountability require explicit attack attribution. We propose FedACT (Federated Autoencoder-Committee-TLBO), a novel framework that prioritizes explicit Byzantine detection over implicit robustness. FedACT employs a three-stage defense pipeline: (1) autoencoder-based anomaly scoring with adaptive MAD thresholding partitions gradients into normal, uncertain, and anomalous zones; (2) diversity-constrained committee voting resolves borderline cases while accommodating legitimate data heterogeneity; and (3) TLBO-based reputation-weighted aggregation with Merkle-tree evidence logging provides accuracy-driven optimization and tamper-evident audit trails. Extensive experiments on two real-world credit datasets demonstrate that FedACT achieves 89.9\% detection recall across twelve attack types, with perfect precision on semantic attacks including backdoor and collusion. While traditional robust aggregators achieve marginally higher model accuracy by silently filtering outliers, FedACT uniquely provides the explicit detection capability and auditability essential for regulated financial environments.
 \end{abstract}
 
 \begin{highlights}
-\item A Byzantine detection framework providing explicit attack identification rather than implicit filtering for federated credit scoring.
-\item Three-zone classification with committee voting accommodates data heterogeneity while maintaining high detection recall.
-\item Reputation system with Merkle-tree logging enables institutional accountability and regulatory audit compliance.
-\item Achieves 89.9\% detection recall with perfect precision on semantic attacks across heterogeneous data scenarios.
+\item A novel Byzantine detection framework providing explicit attack identification rather than implicit filtering for federated credit scoring.
+\item Three-zone classification with diversity-constrained committee voting accommodates data heterogeneity while maintaining 89.9\% detection recall.
+\item Accuracy-driven TLBO aggregation with asymmetric reputation updates and Merkle-tree logging enables institutional accountability.
+\item Perfect precision (100\%) on semantic attacks (backdoor and collusion) across four heterogeneous data scenarios.
 \end{highlights}
 
 \begin{keyword}
@@ -95,9 +95,12 @@ Credit scoring has evolved from logistic regression to gradient boosting and neu
 
 
 %% ============================================================================
-%% PROBLEM FORMULATION
+%% THE FedACT FRAMEWORK
 %% ============================================================================
-\section{Problem Formulation}
+\section{The FedACT Framework}
+\label{sec:method}
+
+\subsection{Problem Formulation}
 \label{sec:problem}
 
 Consider $N$ financial institutions collaboratively training a credit scoring model $\mathbf{w} \in \mathbb{R}^d$. Each client $i$ holds private data $\mathcal{D}_i = \{(\mathbf{x}_j, y_j)\}_{j=1}^{n_i}$ where $\mathbf{x}_j$ represents applicant features and $y_j \in \{0,1\}$ indicates default status. The federated objective minimizes
@@ -107,13 +110,6 @@ F(\mathbf{w}) = \sum_{i=1}^{N} \frac{n_i}{n} F_i(\mathbf{w}), \quad F_i(\mathbf{
 where $\ell$ is binary cross-entropy and $n = \sum_i n_i$. Training proceeds in rounds: the server broadcasts $\mathbf{w}^{(t)}$, clients perform local updates, and gradients $\mathbf{g}_i^{(t)} = \mathbf{w}^{(t)} - \mathbf{w}_i^{(t)}$ are aggregated.
 
 We assume $M < N/2$ Byzantine clients with white-box knowledge of the defense mechanism, ability to submit arbitrary gradients, and potential for coordination. We evaluate against twelve attacks: three basic (sign-flip, Gaussian, scaling), five optimization-based (little, ALIE, IPM, MinMax, trim), and four semantic (label-flip, backdoor, free-rider, collision). Data heterogeneity includes IID baseline, label skew via Dirichlet allocation ($\alpha=0.5$), feature distribution shifts, and power-law quantity skew.
-
-
-%% ============================================================================
-%% THE FedACT FRAMEWORK
-%% ============================================================================
-\section{The FedACT Framework}
-\label{sec:method}
 
 FedACT defends against Byzantine attacks through three integrated stages, each implemented as a distinct algorithm. We present each stage with its algorithm embedded in the corresponding subsection.
 
@@ -226,7 +222,9 @@ All detection decisions are logged to a Merkle tree, creating a tamper-evident a
 \ENDFOR
 \RETURN $\mathbf{g}^*$, $\{\rho_i'\}$
 \end{algorithmic}
-\end{algorithm} The hash chain ensures that any modification to historical records is detectable, enabling auditors to verify the integrity of the detection history and supporting regulatory compliance requirements for financial model governance.
+\end{algorithm}
+
+The Merkle-tree hash chain ensures that any modification to historical records is immediately detectable, enabling auditors to verify the integrity of the complete detection history. This cryptographic commitment supports regulatory compliance requirements for financial model governance and provides irrefutable evidence for institutional accountability.
 
 
 %% ============================================================================
@@ -237,7 +235,7 @@ All detection decisions are logged to a Merkle tree, creating a tamper-evident a
 
 \subsection{Experimental Setup}
 
-We evaluate on two credit scoring datasets: UCI Credit Card Default with 30,000 Taiwan credit card clients and 23 features \citep{Yeh:2009}, and Xinwang Bank with 50,000 loan applicants and 35 features from a Chinese commercial bank. Models are three-layer MLPs trained for 100 rounds with 5 local epochs across $N=10$ clients including $M=3$ attackers. Experiments repeat 3 times on NVIDIA RTX 4090 GPUs.
+We evaluate FedACT on two real-world credit scoring datasets: (1) UCI Credit Card Default \citep{Yeh:2009} containing 30,000 Taiwan credit card clients with 23 features, and (2) Xinwang Bank dataset comprising 50,000 loan applicants with 35 features from a Chinese commercial bank. The credit scoring model is a multi-layer perceptron (MLP) with hidden dimensions [512, 256, 128, 64, 32, 16]. Training proceeds for 100 communication rounds with 5 local epochs per round, across $N=10$ clients including $M=3$ malicious attackers (30\% Byzantine ratio). All experiments are repeated 3 times with different random seeds on NVIDIA RTX 4090 GPUs, and we report mean values.
 
 \subsection{Detection Performance}
 
@@ -355,11 +353,11 @@ The autoencoder is essential: removing it reduces recall by 18.7 percentage poin
 \section{Conclusion}
 \label{sec:conclusion}
 
-We present FedACT, a Byzantine-resilient federated learning framework that prioritizes explicit attack detection over implicit robustness. By combining autoencoder-based anomaly scoring, diversity-constrained committee voting, and reputation-weighted aggregation with Merkle-tree evidence logging, FedACT achieves 89.9\% detection recall with perfect precision on semantic attacks. While traditional robust aggregators achieve marginally higher model accuracy through silent outlier filtering, FedACT uniquely provides the detection capability and auditability essential for regulated financial environments.
+This paper presents FedACT, a Byzantine-resilient federated learning framework that prioritizes explicit attack detection over implicit robustness for credit scoring applications. By integrating autoencoder-based anomaly scoring with three-zone classification, diversity-constrained committee voting, and accuracy-driven TLBO aggregation with Merkle-tree evidence logging, FedACT achieves 89.9\% detection recall with perfect precision (100\%) on semantic attacks including backdoor and collusion. While traditional robust aggregators achieve marginally higher model accuracy through silent outlier filtering, FedACT uniquely provides the explicit detection capability and auditability essential for regulated financial environments.
 
-The framework represents a deliberate trade-off appropriate for credit scoring applications where accountability matters. Regulatory compliance increasingly requires that automated decision systems maintain audit trails and provide explanations for their behavior. FedACT addresses this need by explicitly identifying anomalous participants, accumulating evidence through the reputation system, and maintaining tamper-evident records for auditors.
+The framework represents a deliberate and principled trade-off appropriate for financial applications where institutional accountability matters as much as model performance. With increasing regulatory requirements that automated decision systems maintain comprehensive audit trails and provide explanations for their behavior, FedACT addresses this critical need by explicitly identifying anomalous participants, accumulating evidence through the asymmetric reputation system, and maintaining tamper-evident cryptographic records for auditors.
 
-Limitations include vulnerability to sophisticated collusion attacks that form apparent majorities, and the inherent tension between detection sensitivity and false positive rates under extreme heterogeneity. Future work should explore collusion-resistant committee selection, adversarial training for autoencoder robustness, and formal convergence guarantees under Byzantine presence.
+Limitations of the current work include vulnerability to sophisticated collusion attacks where malicious clients form apparent majorities, and the inherent tension between detection sensitivity and false positive rates under extreme data heterogeneity. Future research directions include collusion-resistant committee selection mechanisms, adversarial training for improved autoencoder robustness, and formal convergence guarantees under Byzantine presence with theoretical attack resilience bounds.
 
 
 %% ============================================================================
