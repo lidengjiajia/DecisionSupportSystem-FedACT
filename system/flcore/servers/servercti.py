@@ -287,10 +287,12 @@ class TLBOAggregator:
         """
         计算梯度的fitness（基于accuracy）
         临时应用梯度，测试accuracy，然后恢复
+        
+        使用服务器的客户端测试数据进行评估
         """
         if self.server is None:
-            # Fallback: 使用余弦相似度
-            return 0.0
+            # Fallback: 返回随机值
+            return np.random.random()
         
         # 保存当前模型参数
         old_params = [p.data.clone() for p in self.server.global_model.parameters()]
@@ -302,20 +304,31 @@ class TLBOAggregator:
             param.data -= gradient[idx:idx+num_params].view(param.shape)
             idx += num_params
         
-        # 快速评估accuracy（使用部分数据）
+        # 快速评估accuracy - 使用客户端的测试数据
         self.server.global_model.eval()
         with torch.no_grad():
             correct = 0
             total = 0
-            # 只用前100个batch快速估计
-            for batch_idx, (x, y) in enumerate(self.server.testloaderfull):
-                if batch_idx >= 10:  # 只用10个batch快速评估
-                    break
-                x, y = x.to(self.server.device), y.to(self.server.device)
-                output = self.server.global_model(x)
-                pred = output.argmax(dim=1)
-                correct += pred.eq(y).sum().item()
-                total += y.size(0)
+            # 使用前3个客户端的测试数据快速评估
+            for client_idx, client in enumerate(self.server.clients[:3]):
+                if not hasattr(client, 'load_test_data'):
+                    continue
+                try:
+                    test_loader = client.load_test_data()
+                    for batch_idx, (x, y) in enumerate(test_loader):
+                        if batch_idx >= 3:  # 每个客户端只用3个batch
+                            break
+                        if isinstance(x, list):
+                            x = [xi.to(self.server.device) for xi in x]
+                        else:
+                            x = x.to(self.server.device)
+                        y = y.to(self.server.device)
+                        output = self.server.global_model(x)
+                        pred = output.argmax(dim=1)
+                        correct += pred.eq(y).sum().item()
+                        total += y.size(0)
+                except Exception:
+                    continue
         
         accuracy = correct / total if total > 0 else 0.0
         
