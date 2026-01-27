@@ -1,14 +1,17 @@
 %% FedACT Paper for Decision Support Systems
 %% Final Version - Streamlined and Academic Style
 
-\documentclass[preprint,12pt]{elsarticle}
+\documentclass[final,3p,times,twocolumn,authoryear]{elsarticle}
 
-\usepackage{amssymb,amsmath}
-\usepackage{booktabs,multirow}
-\usepackage{graphicx,float}
-\usepackage{enumitem}
-\usepackage{algorithm,algorithmic}
-\usepackage{xcolor}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{lineno}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{multirow}
 
 \journal{Decision Support Systems}
 
@@ -18,22 +21,33 @@
 
 \title{FedACT: Byzantine-Resilient Federated Learning with Explicit Attack Detection for Credit Scoring}
 
-\author[ucas,pboc]{Dengjia Li}
-\author[ucas]{Han Qiao}
-\author[pboc]{Chen Yang}
-\author[sdut,hunan]{Yuncheng Qiao\corref{cor1}}
-\ead{qiaoyc@sdut.edu.cn}
+\author[label2,label5]{Yuncheng Qiao\corref{cor1}}
+\author[label1,label4]{Dengjia Li\corref{cor2}}
+\author[label1]{Han Qiao}
+\author[label3,label5]{Chen Yang}
 
-\cortext[cor1]{Corresponding author}
+\affiliation[label1]{organization={China National Clearing Center, People's Bank of China},
+        city={Beijing},
+        country={China}}
 
-\affiliation[ucas]{organization={School of Economics and Management, University of Chinese Academy of Sciences},
-            city={Beijing}, postcode={100190}, country={China}}
-\affiliation[pboc]{organization={China National Clearing Center, The People's Bank of China},
-            city={Beijing}, postcode={100048}, country={China}}
-\affiliation[sdut]{organization={Business School, Shandong University of Technology},
-            city={Zibo}, postcode={255000}, country={China}}
-\affiliation[hunan]{organization={Key Laboratory of High-Performance Distributed Ledger and Digital Finance, Ministry of Education},
-            city={Changsha}, postcode={410082}, country={China}}
+\affiliation[label2]{organization={Business School, Shandong University of Technology},
+        city={Zibo},
+        country={China}}
+
+\affiliation[label3]{organization={Business School, Hunan University},
+        city={Changsha},
+        country={China}}
+
+\affiliation[label4]{organization={School of Economics and Management, University of Chinese Academy of Sciences},
+        city={Beijing},
+        country={China}}
+
+\affiliation[label5]{organization={Key Laboratory of High-Performance Distributed Ledger and Digital Finance, Ministry of Education},
+        city={Changsha},
+        country={China}}
+
+\cortext[cor1]{Corresponding author. E-mail: qiaoyuncheng@sdut.edu.cn}
+\cortext[cor2]{Corresponding author. E-mail: lidengjia@ucas.ac.cn}
 
 \begin{abstract}
 Federated learning enables privacy-preserving collaborative credit scoring, yet existing Byzantine-resilient aggregation methods focus solely on maintaining model accuracy without identifying malicious participants. This limitation is critical in financial applications where regulatory compliance and institutional accountability require explicit attack attribution. We propose FedACT (Federated Autoencoder-Committee-TLBO), a novel framework that prioritizes explicit Byzantine detection over implicit robustness. FedACT employs a three-stage defense pipeline: (1) autoencoder-based anomaly scoring with adaptive MAD thresholding partitions gradients into normal, uncertain, and anomalous zones; (2) diversity-constrained committee voting resolves borderline cases while accommodating legitimate data heterogeneity; and (3) TLBO-based reputation-weighted aggregation with Merkle-tree evidence logging provides accuracy-driven optimization and tamper-evident audit trails. Extensive experiments on two real-world credit datasets demonstrate that FedACT achieves 89.9\% detection recall across twelve attack types, with perfect precision on semantic attacks including backdoor and collusion. While traditional robust aggregators achieve marginally higher model accuracy by silently filtering outliers, FedACT uniquely provides the explicit detection capability and auditability essential for regulated financial environments.
@@ -51,6 +65,8 @@ Federated learning \sep Byzantine detection \sep Credit scoring \sep Anomaly det
 \end{keyword}
 
 \end{frontmatter}
+
+\linenumbers
 
 %% ============================================================================
 %% INTRODUCTION
